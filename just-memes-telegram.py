@@ -679,9 +679,6 @@ def start(update, context):
 
     t.logUser(user_dict)
 
-    #message = "*Welcome in the Just Memes backend bot*\n"
-    #message += "*This bot is used to manage the Just Memes meme channel*\n"
-    #message += "_Join us at_ " + status["channel_name"]
     message = (
         f"*Welcome in the Just Memes backend bot*\n"
         f"*This bot is used to manage the Just Memes meme channel*\n"
@@ -779,9 +776,6 @@ def imagethreshold(update, context):
         status = r.showStatus()
         if len(context.args) == 0:
             image_treshold = status["hash_threshold"]
-            #message = "_Current hash theshold:_ "
-            #message += str(image_treshold)
-            #message += "\n_Pass the threshold as arguments to set a new value_"
             message = (
                 f"_Current hash theshold:_ {image_treshold}"
                 f"\n_Pass the threshold as arguments to set a new value_"
@@ -799,8 +793,6 @@ def imagethreshold(update, context):
 
             status = r.showStatus()
 
-            #message = "_Image threshold:_ "
-            #message += str(status["image_treshold"])
             message = f"_Image threshold:_ {status['image_treshold']}"
     else:
         message = "*This command is for moderators only*"
@@ -814,9 +806,6 @@ def start_delay(update, context):
         status = r.showStatus()
         if len(context.args) == 0:
             start_delay = status["hash_threshold"]
-            #message = "_Current start delay:_ "
-            #message += str(start_delay)
-            #message += "\n_Pass the threshold as arguments to set a new value_"
             message = (
                 f"_Current start delay:_ {str(start_delay)}\n"
                 f"_Pass the threshold as arguments to set a new value_"
@@ -859,15 +848,11 @@ def queue(update, context):
     if chat_id in status["admins"]:
         if len(context.args) == 0:
             if len(status["queue"]) > 0:
-                #message = "_Current message queue:_\n"
-                #message += json.dumps(status["queue"], indent=4, sort_keys=True)
                 message = (
                     f"_Current message queue:_\n"
                     f"{json.dumps(status['queue'], indent=4, sort_keys=True)}"
                 )
             else:
-                #message = "*The queue is empty*"
-                #message += "\n_Pass the links as arguments to set them_"
                 message = (
                     f"*The queue is empty*\n"
                     f"_Pass the links as arguments to set them_"
@@ -893,8 +878,6 @@ def queue(update, context):
                 t.saveSettings()
                 r.updatePosted(to_post)
 
-            #message = "_Image(s) added to queue_\n"
-            #message += "_Use /queue to chech the current queue_"
             message = (
                 f"_Image(s) added to queue_\n"
                 f"_Use /queue to chech the current queue_"
@@ -930,9 +913,7 @@ def postsperday(update, context):
     if chat_id in status["admins"]:
         if len(context.args) == 0:
             posts_per_day = status["posts_per_day"]
-            #message = "_Posts per day:_ "
-            #message += str(posts_per_day)
-            #message += "\n_Pass the number of posts per day as arguments to set a new value_"
+
             message = (
                 f"_Posts per day:_ {posts_per_day}\n"
                 f"_Pass the number of posts per day as arguments to set a new value_"
@@ -949,8 +930,6 @@ def postsperday(update, context):
             t.setMemesRoutineInterval()
             t.saveSettings()
 
-            #message = "_Number of posts per day:_ "
-            #message += str(posts_per_day)
             message = f"_Number of posts per day:_ {posts_per_day}"
     else:
         message = "*This command is for moderators only*"
