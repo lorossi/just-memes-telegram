@@ -1,0 +1,669 @@
+import requests
+import json
+import datetime
+import os
+import configparser
+import logging
+import time
+import sys
+import praw
+import imagehash
+from PIL import Image
+from telegram import ParseMode
+from telegram.ext import Updater, CommandHandler, JobQueue, CallbackContext
+
+class Reddit:
+    def __init__(self, debug=False):
+        self.debug = debug
+        self.posts = []
+        self.to_post = []
+
+    def showStatus(self):
+        return {
+            "request_limit" : self.request_limit,
+            "subreddits" : self.subreddits,
+            "posted_folder" : self.posted_folder
+        }
+
+    def loadSettings(self, filename):
+        if not self.debug:
+            self.settings_path = filename
+        else:
+            self.settings_path = filename + "_debug"
+
+
+        self.settings = configparser.ConfigParser()
+        self.settings.read(self.settings_path)
+        self.id = self.settings["Reddit"]["id"]
+        self.token = self.settings["Reddit"]["token"]
+        self.request_limit = int(self.settings["Reddit"]["request_limit"])
+        self.subreddits = self.settings["Reddit"]["subreddits"].split(",")
+        self.posted_folder = self.settings["Reddit"]["posted_folder"]
+        self.max_days = int(self.settings["Reddit"]["max_days"])
+        self.posted_full_path = self.posted_folder + "/" + "posted"
+
+    def login(self):
+        self.reddit = praw.Reddit(client_id=self.id,
+                     client_secret=self.token,
+                     user_agent='PC')
+
+    def saveSettings(self):
+        with open(self.settings_path, 'w') as configfile:
+            self.settings.write(configfile)
+
+    def loadPosts(self):
+        now = datetime.datetime.now() # current date and time
+        timestamp = now.strftime("%Y%m%d")
+
+        for submission in self.reddit.subreddit("+".join(self.subreddits)).hot(limit=self.request_limit):
+            if not submission.selftext and not submission.stickied:
+
+                if "v.redd.it" in submission.url:
+                    continue
+                if ".gif" in submission.url:
+                    continue
+
+                try:
+                    #CHECKSUM CREATION
+                    r = requests.get(submission.url, stream=True)
+                    r.raw.decode_content = True # handle spurious Content-Encoding
+                    im = Image.open(r.raw)
+                    hash = imagehash.average_hash(im)
+                    im.close()
+
+                    self.posts.append(
+                        {
+                            "id" : submission.id,
+                            "url" : submission.url,
+                            "timestamp" : timestamp,
+                            "hash" : str(hash)
+                        }
+                    )
+                except Exception as e:
+                    logging.error("error while hashing: %s %s", e, submission.url)
+                    pass
+
+        return True
+
+    def findNew(self):
+        if os.path.exists(self.posted_full_path):
+            with open(self.posted_full_path) as json_file:
+                self.posted = json.load(json_file)
+        else:
+            open(self.posted_full_path, "w+")
+            self.posted = []
+
+        self.to_post = []
+
+        for post in self.posts: #current loaded posts
+            if post not in self.posted: #if the post hasn't been posted alreay
+
+                for posted in self.posted: #posted posts
+                    posted_hash = imagehash.hex_to_hash(posted["hash"]) #old hash
+                    post_hash = imagehash.hex_to_hash(post["hash"]) #new hash
+                    if post_hash - posted_hash < 4: #if the images are too similar
+                        #it's a repost
+                        logging.warning("REPOST: %s is too similar to %s similarity: %s", post["id"], posted["id"], str(post_hash-posted_hash))
+                        break #don't post it
+
+                    self.to_post = post #otherwise, we found it
+                    return True
+        return False #no new posts...
+
+    def updateList(self):
+        with open(self.posted_full_path) as json_file:
+            posted_data = json.load(json_file)
+
+        posted_data.append(self.to_post)
+
+        with open(self.posted_full_path, 'w') as outfile:
+            json.dump(posted_data, outfile)
+
+    def fetch(self):
+        logging.info("Fetching new memes...")
+        #while not self.findNew():
+        #    while not self.loadPosts():
+        #        logging.info("Trying again in 10...")
+        #        time.sleep(10)
+
+        while not self.loadPosts():
+            logging.waring("Cannot load posts")
+            time.sleep(10)
+
+        while not self.findNew():
+            logging.waring("Cannot find new posts")
+            time.sleep(10)
+            self.loadPosts()
+
+        self.updateList()
+        logging.info("Memes fetched")
+        return self.to_post
+
+    def setsubreddits(self, subreddits):
+        self.subreddits = []
+        for subreddit in subreddits:
+            self.subreddits.append(subreddit)
+        self.settings["Reddit"]["subreddits"] = ",".join(self.subreddits)
+        self.saveSettings()
+
+    def cleanPosted(self):
+        logging.info("Cleaning posted data...")
+        now = datetime.datetime.now() # current date and time
+        timestamp = now.strftime("%Y%m%d")
+
+        with open(self.posted_full_path) as json_file:
+            posted_data = json.load(json_file)
+
+        for posted in posted_data:
+            post_timestamp = datetime.datetime.strptime(posted["timestamp"], "%Y%m%d")
+            if (now - post_timestamp).days > self.max_days:
+                posted["delete"] = True
+
+        posted_data = [x for x in posted_data if not "delete" in x]
+        with open(self.posted_full_path, 'w') as outfile:
+            json.dump(posted_data, outfile)
+
+class Telegram:
+    def __init__(self, debug=False):
+        self.debug = debug
+        self.time_format = '%Y/%m/%d %H:%M:%S'
+        self.version = "1.1.3"
+        self.calculateStartTime()
+
+    def loadSettings(self, filename):
+        if not self.debug:
+            self.settings_path = filename
+        else:
+            self.settings_path = filename + "_debug"
+
+        self.settings = configparser.ConfigParser()
+        self.settings.read(self.settings_path)
+
+        self.token = self.settings["Telegram"]["token"]
+        self.channel_name = self.settings["Telegram"]["channel_name"]
+        self.posts_per_day = int(self.settings["Telegram"]["posts_per_day"])
+
+        if self.settings["Telegram"]["posted_today"]:
+            self.posted_today = int(self.settings["Telegram"]["posted_today"])
+        else:
+            self.posted_today = 0
+
+        last_posted_timestamp = self.settings["Telegram"]["last_posted"]
+        if last_posted_timestamp:
+            last_posted_struct = time.strptime(last_posted_timestamp, self.time_format)
+            self.last_posted = datetime.datetime(*last_posted_struct[:6])
+        else:
+            self.last_posted = None
+
+        next_post_timestamp = self.settings["Telegram"]["next_post"]
+        if next_post_timestamp:
+            next_post_struct = time.strptime(next_post_timestamp, self.time_format)
+            self.next_post = datetime.datetime(*next_post_struct[:6])
+        else:
+            self.next_post = None
+
+        if self.settings["Telegram"]["queue"] != "":
+            queue_string = self.settings["Telegram"]["queue"]
+            self.queue = json.loads(queue_string)
+        else:
+            self.queue = []
+
+
+        self.admins = [int(x) for x in self.settings["Telegram"]["admins"].split(",") if x]
+        self.user_log_file =  self.settings["Telegram"]["users_log_file"]
+        self.minutes_between_messages = 24 * 60 / self.posts_per_day
+
+    def saveSettings(self):
+        with open(self.settings_path, 'w') as configfile:
+            self.settings.write(configfile)
+
+    def start(self):
+        self.updater = Updater(self.token, use_context=True)
+        self.dispatcher = self.updater.dispatcher
+        self.jobqueue = self.updater.job_queue
+
+        self.jobqueue.run_repeating(send_memes, interval=30, first=5, name="send_memes")
+        self.jobqueue.run_once(start_notification, when=0, name="start_notification")
+
+        self.jobqueue.run_daily(new_day, datetime.time(00, 1, 00, 000000), name="new_day")
+
+        self.dispatcher.add_handler(CommandHandler('start', start))
+        self.dispatcher.add_handler(CommandHandler('reset', reset)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('stop', stop)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('nextpost', nextpost, pass_args=True)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('addtoqueue', addtoqueue, pass_args=True)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('showqueue', showqueue, pass_args=True)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('cleanqueue', cleanqueue)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('setsubreddits', setsubreddits, pass_args=True)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('viewsubreddits', viewsubreddits)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('viewpostsperday', viewpostsperday)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('setpostsperday', setpostsperday)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('showcurrentversion', showcurrentversion)) #DANGEROUS
+        self.dispatcher.add_handler(CommandHandler('cleanpostedlist', cleanpostedlist)) #DANGEROUS
+
+        self.dispatcher.add_error_handler(error)
+        self.updater.start_polling()
+
+    def idle(self):
+        self.updater.idle()
+
+    def updateQueue(self, post):
+        now = datetime.datetime.now() # current date and time
+        timestamp = now.strftime("%Y%m%d")
+        self.queue.append(post)
+        queue_string = json.dumps(self.queue)
+        self.settings["Telegram"]["queue"] = queue_string
+        self.saveSettings()
+
+    def showStatus(self):
+        return {
+            "queue" : self.queue,
+            "caption" : self.channel_name,
+            "channel_name" : self.channel_name,
+            "admins" : self.admins,
+            "last_posted" : self.last_posted,
+            "next_post" : self.next_post,
+            "posts_per_day" : self.posts_per_day,
+            "posted_today" : self.posted_today,
+            "minutes_between_messages" : self.minutes_between_messages,
+            "start_time" : self.start_time,
+            "time_format" : self.time_format,
+            "version" : self.version
+        }
+
+    def setPostsPerDay(self, posts_per_day):
+        self.posts_per_day = posts_per_day
+        self.minutes_between_messages = 24 * 60 / self.posts_per_day
+        self.settings["Telegram"]["posts_per_day"]  = str(self.posts_per_day)
+        self.saveSettings()
+
+    def popQueue(self):
+        self.queue.pop(0)
+        if self.queue:
+            queue_string = json.dumps(self.queue)
+        else:
+            queue_string = ""
+
+        self.settings["Telegram"]["queue"] = queue_string
+        self.saveSettings()
+
+    def pushQueue(self, url):
+        self.queue.insert(0,url)
+        queue_string = ",".join([x for x in self.queue])
+        self.settings["Telegram"]["queue"] = queue_string
+        self.saveSettings()
+
+    def cleanQueue(self):
+        self.queue = []
+        self.settings["Telegram"]["queue"] = ""
+        self.saveSettings();
+
+    def updateLastSent(self, last_posted):
+        self.last_posted = last_posted
+        timestamp = last_posted.strftime(self.time_format)
+        self.settings["Telegram"]["last_posted"] = timestamp
+        self.saveSettings()
+
+    def updateNextSend(self, next_post):
+        self.next_post = next_post
+        timestamp = next_post.strftime(self.time_format)
+        self.settings["Telegram"]["next_post"] = timestamp
+        self.saveSettings()
+
+    def updatePostedToday(self):
+        self.posted_today += 1
+        self.settings["Telegram"]["posted_today"] = str(self.posted_today)
+        self.saveSettings()
+
+    def setPostedToday(self, posted):
+        self.posted_today = posted
+        self.settings["Telegram"]["posted_today"] = str(self.posted_today)
+        self.saveSettings()
+
+    def calculateStartTime(self):
+        self.start_time = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def logUser(self, user_dict):
+        if (os.path.exists(self.user_log_file)):
+            with open(self.user_log_file) as json_file:
+                all_user_data = json.load(json_file)
+        else:
+            open(self.user_log_file, "w+")
+            all_user_data = []
+
+        not_found = True
+        for d in all_user_data:
+            if d["chat_id"] == user_dict["chat_id"]:
+                d.update(user_dict)
+                not_found = False
+                break
+
+        if not_found:
+            all_user_data.append(user_dict)
+
+        with open(self.user_log_file, 'w') as outfile:
+            json.dump(all_user_data, outfile)
+
+
+def error(update, context):
+    """Log Errors caused by Updates."""
+    #logging.error(context.error)
+    status = t.showStatus()
+
+    for chat_id in status["admins"]:
+        message = "*ERROR RAISED*"
+        context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+    message = f"_Error at time:_ {datetime.datetime.now().strftime(status['time_format'])}\n"
+    message += f"_Error raised:_ {context.error}\n"
+    message += f"_Update:_ {update}"
+
+    for chat_id in status["admins"]:
+        context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+    logging.error('Update "%s" caused error "%s"', update, context.error)
+
+def start_notification(context: CallbackContext):
+    status = t.showStatus()
+    message = "*Bot started!*"
+    for chat_id in status["admins"]:
+        context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def start(update, context):
+    chat_id = update.effective_chat.id
+    username =  update.effective_chat.username
+    name = update.effective_chat.first_name
+    status = t.showStatus()
+
+    user_dict = {
+        "username" : username,
+        "name" : name,
+        "chat_id" : chat_id,
+        "time" : datetime.datetime.now().strftime(status['time_format']),
+        "action" : "start"
+    }
+
+    t.logUser(user_dict)
+
+    message = "*Welcome in the Memes Only backend bot*\n"
+    message += "*This bot is used to manage the Memes Only meme channel*\n"
+    message += "_Join us at_ " + status["channel_name"]
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def reset(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+
+    if chat_id in status["admins"]:
+        message = "_Resetting..._"
+        t.settings["Telegram"]["last_posted"] = ""
+        t.settings["Telegram"]["next_post"] = ""
+        t.settings["Telegram"]["queue"] = ""
+        t.settings["Telegram"]["posted_today"] = "0"
+
+        context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+        logging.warning("Resetting")
+        os.execl(sys.executable, sys.executable, * sys.argv)
+    else:
+        message = "*This command is for moderators only*"
+        context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def stop(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+
+    if chat_id in status["admins"]:
+        message = "_Bot stopped_"
+        context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+        t.saveSettings()
+        t.updater.stop()
+        os._exit()
+        exit()
+    else:
+        message = "*This command is for moderators only*"
+        context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def nextpost(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+
+    if chat_id in status["admins"]:
+        next_post_timestamp = status["next_post"].strftime(status["time_format"])
+        message = "_The next meme is scheduled for:_\n"
+        message += next_post_timestamp
+    else:
+        message = "*This command is for moderators only*"
+
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def addtoqueue(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+
+    if chat_id in status["admins"]:
+        if len(context.args) == 0:
+            message = "_Pass the new image(s) url(s) as args_"
+        else:
+            now = datetime.datetime.now() # current date and time
+            timestamp = now.strftime("%Y%m%d")
+            for arg in context.args:
+                t.pushQueue({
+                    "id" : None,
+                    "url" : arg,
+                    "subreddit" : None,
+                    "timestamp" : timestamp,
+                    "hash" : None
+                })
+
+            message = "\n".join(context.args)
+            message += "\n_Added to queue_"
+    else:
+        message = "*This command is for moderators only*"
+
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def showqueue(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+    if chat_id in status["admins"]:
+        message = "_Current message queue:_\n"
+        message += "\n".join(status["queue"])
+        if not message:
+            message = "*The queue is empty*"
+    else:
+        message = "*This command is for moderators only*"
+
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def cleanqueue(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+    if chat_id in status["admins"]:
+        t.cleanQueue()
+        message = "_The queue has been cleaned_"
+    else:
+        message = "*This command is for moderators only*"
+
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def setsubreddits(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+    if chat_id in status["admins"]:
+        if len(context.args) == 0:
+            message = "_Pass the new subreddits as args_"
+        else:
+            r.setsubreddits(context.args)
+            r.saveSettings()
+            message = "_New subreddit list:_\n"
+            message += "\n".join(context.args).replace("_", "\\_")
+    else:
+        message = "*This command is for moderators only*"
+
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def viewsubreddits(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+    if chat_id in status["admins"]:
+        subreddits = r.showStatus()["subreddits"]
+        message = "_Current subreddits:_\n"
+        message += "\n".join(subreddits).replace("_", "\\_")
+    else:
+        message = "*This command is for moderators only*"
+
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def setpostsperday(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+    if chat_id in status["admins"]:
+        if len(context.args) == 0:
+            message = "_Pass the number of posts per day as args_"
+        else:
+            try:
+                posts_per_day = int(context.args[0])
+            except:
+                message = "_The arg provided is not a number_"
+                context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+                return
+
+            t.setPostsPerDay(posts_per_day)
+
+            status = t.showStatus()
+            now = datetime.datetime.now()
+            minutes_since_start = int((now - status["start_time"]).seconds / 60)
+            memes_today = int(minutes_since_start / status["minutes_between_messages"]) #number of memes that should have been sent today
+            next_post = status["start_time"] + datetime.timedelta(minutes=(memes_today+1)*status["minutes_between_messages"])
+            t.updateNextSend(next_post)
+
+            message = "_Number of posts per day:_ "
+            message += str(posts_per_day)
+    else:
+        message = "*This command is for moderators only*"
+
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def viewpostsperday(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+    if chat_id in status["admins"]:
+        posts_per_day = status["posts_per_day"]
+        message = "_Posts per day:_ "
+        message += str(posts_per_day)
+    else:
+        message = "*This command is for moderators only*"
+
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def showcurrentversion(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+    if chat_id in status["admins"]:
+        version = status["version"]
+        message = "_Version:_ "
+        message += version
+    else:
+        message = "*This command is for moderators only*"
+
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+def cleanpostedlist(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+    if chat_id in status["admins"]:
+        empty_data = []
+        with open(r.posted_full_path, 'w') as outfile:
+            json.dump(empty_data, outfile)
+
+        message = "*Posted list cleaned*"
+    else:
+        message = "*This command is for moderators only*"
+
+    context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+
+def send_memes(context: CallbackContext):
+    logging.info("sending memes routine begin...")
+    now = datetime.datetime.now()
+    status = t.showStatus()
+
+    minutes_since_start = int((now - status["start_time"]).seconds / 60)
+    memes_today = int(minutes_since_start / status["minutes_between_messages"]) #number of memes that should have been sent today
+
+    if not status["last_posted"] or not status["next_post"]: #no meme has been sent yet. We need to wait an appropriate time
+        logging.info("no meme has been sent today")
+        last_posted = status["start_time"] + datetime.timedelta(minutes=memes_today*status["minutes_between_messages"])
+        next_post = status["start_time"] + datetime.timedelta(minutes=(memes_today+1)*status["minutes_between_messages"])
+        t.updateLastSent(last_posted)
+        t.updateNextSend(next_post)
+        t.setPostedToday(memes_today)
+        status = t.showStatus()
+
+    if memes_today != status["posted_today"]:
+        logging.info("Correcting number of memes sent today")
+        #if the bot doesn't start at the correct time, memes are skipped
+        #we check if the memes that have been sent today are enough
+        #otherwise, it would spam in the first iterations
+        t.setPostedToday(memes_today)
+        status = t.showStatus()
+
+    if status["posted_today"] >= status["posts_per_day"]: #enough memes have been sent today
+        logging.info("too many memes have been already sent today")
+        return
+
+    if status["next_post"] <= now: #if the date has already passed
+        logging.info("time to send a meme...")
+        if not status["queue"] or len(status["queue"]) == 0:
+            to_post = r.fetch()
+            logging.info("Posts loaded")
+            t.updateQueue(to_post)
+            status = t.showStatus()
+
+        #it's time to post a meme
+        channel_name = status["channel_name"]
+        url = status["queue"][0]["url"]
+        caption = status["caption"]
+
+        context.bot.send_photo(chat_id=channel_name, photo=url, caption=caption)
+
+        last_posted = datetime.datetime.now()
+        next_post = status["start_time"] + datetime.timedelta(minutes=(status["posted_today"]+1)*status["minutes_between_messages"])
+
+        t.updateLastSent(last_posted)
+        t.updateNextSend(next_post)
+        t.updatePostedToday()
+
+    logging.info("...sending memes routine ends")
+
+def new_day(context: CallbackContext):
+    logging.info("New day routine...")
+    status = t.showStatus()
+    message = "*New day routine!*"
+    for chat_id in status["admins"]:
+        context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+    t.setPostedToday(0)
+    t.calculateStartTime()
+    r.cleanPosted()
+    logging.info("...new day routine ended")
+
+
+settings_file = "settings/settings"
+logging_path = "logs/bot_log"
+
+logging.basicConfig(filename=logging_path, level=logging.WARNING, format='%(asctime)s %(levelname)s %(message)s', filemode="w+")
+#logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+
+r = Reddit(debug=False)
+r.loadSettings(settings_file)
+r.login()
+logging.info("Reddit initialized")
+
+t = Telegram(debug=False)
+t.loadSettings(settings_file)
+logging.info("Telegram initialized")
+
+t.start()
+t.idle()
+logging.info("Bot running")
