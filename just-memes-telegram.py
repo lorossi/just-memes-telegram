@@ -259,8 +259,8 @@ def send_memes(context: CallbackContext):
             pass
 
     t.saveSettings()
-    r.updatePosted()
-    r.updateDiscarded()
+    r._updatePosted()
+    r._updateDiscarded()
     # we remove rhe last posted link from queue
     t.popQueue()
     t.saveSettings()
@@ -551,7 +551,7 @@ def queue(update, context):
 
                 t.updateQueue(to_post)
                 t.saveSettings()
-                r.updatePosted(to_post)
+                r._updatePosted(to_post)
 
             message = (
                 f"_Image(s) added to queue_\n"
