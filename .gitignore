@@ -1,2 +1,4 @@
 *.log
 settings.json
+posted.json
+discarded.json
