@@ -39,7 +39,8 @@ class Reddit:
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
-        old_settings["Reddit"].update(self._settings)
+        # update old dictionary
+        old_settings["Reddit"] |= self._settings
 
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
@@ -504,6 +505,8 @@ def main():
 
     r = Reddit()
     r.fetch()
+    r.cleanPosted()
+    r.cleanDiscarded()
 
 
 if __name__ == '__main__':

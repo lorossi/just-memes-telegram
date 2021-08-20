@@ -48,7 +48,8 @@ class Telegram:
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
-        old_settings["Telegram"].update(self._settings)
+        # update old dictionary
+        old_settings["Telegram"] |= self._settings
 
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
@@ -62,7 +63,8 @@ class Telegram:
         return escaped
 
     def _calculateTiming(self):
-        # Calculates seconds between posts and until next post
+        """ Calculates seconds between posts and until next post"""
+
         self._minutes_between_messages = int(
             24 * 60 / self._posts_per_day
         )
