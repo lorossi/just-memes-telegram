@@ -19,7 +19,7 @@ class Reddit:
 
     def __init__(self):
         self._posts = []  # list of fetched posts
-        self._to_post = []  # list of post to be posted
+        self._post_queue = []  # list of next post
         self._posted = []  # list of post that have been already posted
         self._to_discard = []  # list of posts to discard
         self._settings = {}
@@ -40,7 +40,9 @@ class Reddit:
 
         old_settings["Reddit"].update(self._settings)
 
-        with open(self._settings_path, 'w') as outfile:
+        print(ujson.dumps(old_settings, indent=2))
+
+        with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
 
     def _loadPosted(self):
@@ -80,21 +82,26 @@ class Reddit:
             hash = imagehash.average_hash(im) if hash else None
             # OCR it
             if ocr:
-                unicode_caption = pytesseract.image_to_string(im).lower()
-                if unicode_caption.strip() == "":
+                raw_caption = pytesseract.image_to_string(im)
+                raw_caption = raw_caption.lower().strip()
+
+                if raw_caption == "":
                     caption = ""
                 else:
                     printable = set(string.printable)
-                    caption = ''.join(
-                        filter(lambda x: x in printable, unicode_caption)
+                    caption = "".join(
+                        filter(lambda x: x in printable, raw_caption)
                     )
             else:
                 caption = None
+
             # close the image
             im.close()
+
         except Exception as e:
-            logging.error(f'ERROR while fingerprinting {e} {url}')
+            logging.error(f"ERROR while fingerprinting {e} {url}")
             return None
+
         return {
             "hash": hash,
             "string_hash": str(hash),
@@ -152,15 +159,93 @@ class Reddit:
         # we found at leat a post
         return len(self._posts)
 
-    def _checkPostedPosts(self):
-        return
+    def _isAlreadyDiscarded(self, post):
+        for discarded in self._discarded:
+            if "id" in post and "id" in discarded:
+                if post["id"] == discarded["id"]:
+                    logging.info(
+                        f"Post id {discarded['id']} has "
+                        "already been discarded"
+                    )
+                    return True
 
-    def _checkDiscardedPosts(self):
-        return
+            if post["url"] == discarded["url"]:
+                logging.info(
+                    f"url { post['url']} has already been discarded"
+                )
+                return True
 
-    def _findNew(self):
-        # ok, this is a mess
-        # but fear no, I'm going to split this huge method in smaller methods
+    def _containsSkipWords(self, post):
+        lower_title = post["title"].lower()
+        # check if the title contains one of the words to skip
+        if any(word in lower_title for word in
+               self._settings["words_to_skip"]):
+            # we found one of the words to skip
+            logging.warning(
+                f"REPOST: title contains banned word(s). "
+                f"Title: {post['title']}"
+            )
+            return True
+
+        return False
+
+    def _isAlreadyPosted(self, post):  # sourcery skip: merge-nested-ifs
+        fingerprint = self._imageFingerprint(
+            post["url"],
+            hash=self._settings["hash_threshold"] > 0,
+            ocr=self._settings["ocr"],
+        )
+
+        if not fingerprint:
+            logging.error(f"Couldn't fingerprint image {post['url']}")
+            return
+
+        for posted in self._posted:
+            posted_hash = imagehash.hex_to_hash(posted["hash"])  # old hash
+            # this meme has already been posted...
+            if "id" in post and "id" in posted:
+                if post["id"] == posted["id"]:
+                    logging.info(
+                        f"Post id {posted['id']} has already been posted"
+                    )
+                    return True
+
+            if post["url"] == posted["url"]:
+                logging.info(
+                    f"url {posted['url']} has already been posted"
+                )
+                return True
+
+            if "caption" in posted and "caption" in fingerprint:
+                if fingerprint["caption"] == posted["caption"]:
+                    logging.info(
+                        f"Post with caption {posted['caption']} "
+                        "has already been posted"
+                    )
+                    return True
+
+            if not fingerprint["hash"]:
+                logging.info(f"Skipping hash for {post['id']}")
+            else:
+                difference = fingerprint["hash"] - posted_hash
+            # if the images are too similar
+                if difference < self._settings["hash_threshold"]:
+                    self._to_discard.append(post)
+                    # it's a repost
+                    logging.warning(
+                        f"REPOST: {post['id']} is too similar to "
+                        f"{posted['id']}. "
+                        f"similarity: {difference}",
+                    )
+                    self._updateDiscarded()
+                    # don't post it
+                    return True
+
+        post["hash"] = fingerprint["string_hash"]
+        post["caption"] = fingerprint["caption"]
+        return False
+
+    def _findNew(self):  # sourcery skip: extract-method
         # Checks if new posts loaded (currently in self.posts list) are in fact
         # new or just a repost.
 
@@ -171,127 +256,44 @@ class Reddit:
         self._loadDiscarded()
 
         # clear
-        self._to_post = None  # single item
+        self._post_queue = []  # list of posts
         self._to_discard = []  # list of posts
 
         # If no meme has been posted yet, there's no need to check
         if len(self._posted) == 0 and len(self._discarded) == 0:
             logging.info("No meme has been posted before!")
+
             fingerprint = self._imageFingerprint(
                 self._posts[0]["url"],
                 ocr=self._settings["ocr"],
-                hash=self._settings["hash_threshold"] > 0
+                hash=self._settings["hash_threshold"] > 0,
             )
 
             self._posts[0]["hash"] = fingerprint["string_hash"]
             self._posts[0]["caption"] = fingerprint["caption"]
-            self._to_post = self._posts[0]
+            self._post_queue.append(self._posts[0])
+
             return True
 
         # current loaded posts
         for post in self._posts:
-            found = False
 
-            for discarded in self._discarded:
-                if post["id"] == discarded["id"]:
-                    logging.info(
-                        f"Post id {discarded['id']} has already been discarded"
-                    )
-                    found = True
-                    break
-
-                if post["url"] == discarded["url"]:
-                    logging.info(
-                        f"url { post['url']} has already been discarded"
-                    )
-                    found = True
-                    break
-
-            if found:
+            if self._isAlreadyDiscarded(post):
                 continue
 
-            if any(word.lower() in post["title"].lower() for word in self._settings["words_to_skip"]):
-                # we found one of the words to skip
-                logging.warning(
-                    f"REPOST: title contains banned word(s). "
-                    "Title:{ post['title']}"
-                )
+            if self._containsSkipWords(post):
                 continue
 
-            fingerprint = self._imageFingerprint(
-                post["url"],
-                hash=self._settings["hash_threshold"] > 0,
-                ocr=self._settings["ocr"],
-            )
-
-            if not fingerprint:
-                logging.error(f"Couldn't fingerprint image {post['url']}")
+            if self._isAlreadyPosted(post):
                 continue
-            if not fingerprint["caption"]:
-                logging.info(f"Post {post['id']} has no caption")
 
-            # posted posts
-            for posted in self._posted:
+            self._post_queue.append(post)
+            # we found a post
+            return True
 
-                posted_hash = imagehash.hex_to_hash(posted["hash"])  # old hash
-
-                # this meme has already been posted...
-                if post["id"] == posted["id"]:
-                    logging.info(
-                        f"Post id {posted['id']} has already been posted"
-                    )
-                    found = True
-                    break
-
-                if post["url"] == posted["url"]:
-                    logging.info(
-                        f"url {posted['url']} has already been posted"
-                    )
-                    found = True
-                    break
-
-                if posted["caption"] and fingerprint["caption"] and fingerprint["caption"] == posted["caption"]:
-                    logging.info(
-                        f"Post with caption {posted['caption']} "
-                        "has already been posted"
-                    )
-                    found = True
-                    break
-
-                if not fingerprint["hash"]:
-                    logging.info(f"Skipping hash for {post['id']}")
-                # if the images are too similar
-                elif fingerprint["hash"] - posted_hash < self._settings["hash_threshold"]:
-                    found = True
-                    self._to_discard.append(post)
-                    # it's a repost
-                    logging.warning(
-                        f"REPOST: {post['id']} is too similar to "
-                        f"{posted['id']}. "
-                        f"similarity: {str(fingerprint['hash']-posted_hash)}",
-                    )
-                    # don't post it
-                    break
-
-                elif fingerprint["caption"] and posted["caption"] and any(word.lower() in fingerprint["caption"].lower() for word in self.words_to_skip):
-                    found = True
-                    self._to_discard.append(post)
-                    # we found one of the words to skip
-                    logging.warning("REPOST: %s contains banned word(s). Complete caption: %s",
-                                    post["id"], fingerprint["caption"].lower())
-                    break
-
-            if not found:
-                post["hash"] = fingerprint["string_hash"]
-                post["caption"] = fingerprint["caption"]
-                self._to_post = post
-                return True
-
-        # no new posts...
         return False
 
     def _updatePosted(self):
-        # THIS HAS TO BE CALLED WITH THE GETTER FOR THE NEW POST
         # Update posted file
         try:
             with open(self._settings["posted_file"], "r") as json_file:
@@ -299,7 +301,7 @@ class Reddit:
         except FileNotFoundError:
             posted_data = []
 
-        posted_data.append(self._to_post)
+        posted_data.append(self._post_queue[0])
 
         with open(self._settings["posted_file"], "w") as json_file:
             ujson.dump(posted_data, json_file, indent=2)
@@ -307,8 +309,7 @@ class Reddit:
         logging.info("Posted list saved")
 
     def _updateDiscarded(self):
-        # THIS HAS TO BE CALLED WITH THE GETTER FOR THE NEW POST
-
+        # Update discarded file
         if not self._to_discard:
             return
 
@@ -377,19 +378,25 @@ class Reddit:
         # Let's keep all the post that are not flagged and save it to file
         new_posted_data = [x for x in posted_data if "delete" not in x]
 
-        with open(self.posted_full_path, 'w') as outfile:
+        # write new data to file
+        with open(self._settings["posted_file"], "w") as outfile:
             ujson.dump(new_posted_data, outfile, indent=2)
+
+        logging.info("Posted data cleaned")
 
         return old_count
 
     def cleanDiscarded(self):
-        # TODO CLEAN THIS
         # Deletes the list of already posted subreddits
         logging.info("Cleaning discarded data...")
         now = datetime.datetime.now()  # current date and time
 
-        with open(self.posted_full_path) as json_file:
-            discarded_data = ujson.load(json_file)
+        try:
+            with open(self._settings["discarded_file"]) as json_file:
+                discarded_data = ujson.load(json_file)
+        except FileNotFoundError:
+            logging.info("No old posted files found")
+            return 0
 
         discarded_count = 0
 
@@ -405,40 +412,86 @@ class Reddit:
                 discarded["delete"] = True
 
         # Let's keep all the post that are not flagged and save it to file
-        new_discarded_data = [x for x in discarded_data if "delete" not in x]
-        with open(self.discarded_full_path, 'w') as outfile:
+        new_discarded_data = [
+            x for x in discarded_data if "delete" not in x
+        ]
+
+        # write new data to file
+        with open(self._settings["discarded_file"], "w") as outfile:
             ujson.dump(new_discarded_data, outfile, indent=2)
+
+        logging.info("Posted data cleaned")
 
         return discarded_count
 
-    def toggleOcr(self):
-        # TODO replace with setter
-        self.ocr = not self.ocr
-        self._settings["ocr"] = not self._settings["ocr"]
+    def addPost(self, url):
+        fingerprint = self._imageFingerprint(
+            url,
+            hash=self._settings["hash_threshold"] > 0,
+            ocr=self._settings["ocr"],
+        )
+        self._post_queue.append({
+            "url": url,
+            "hash": fingerprint["string_hash"],
+            "caption":  fingerprint["caption"],
+        })
 
-    def setThreshold(self, threshold):
-        # TODO replace with setter
-        self.hash_threshold = threshold
-        self._settings["hash_threshold"] = threshold
+    def cleanQueue(self):
+        self._post_queue = []
 
-    def setSubreddits(self, subreddits):
-        # TODO replace with setter
-        # Sets the new list of subreddits and saves it to file
-        self.subreddits = []
-        for subreddit in subreddits:
-            self.subreddits.append(subreddit)
+    @property
+    def ocr(self):
+        return self._settings["ocr"]
 
-        self._settings["subreddits"] = self.subreddits
+    @ocr.setter
+    def ocr(self, value):
+        self._settings["ocr"] = value
+        self._saveSettings()
 
-    def setWordstoskip(self, wordstoskip):
-        # TODO replace with setter
-        self.words_to_skip = []
-        for word in wordstoskip:
-            self.words_to_skip.append(word)
+    @property
+    def threshold(self):
+        return self._settings["hash_threshold"]
 
-        self._settings["words_to_skip"] = self.words_to_skip
+    @threshold.setter
+    def threshold(self, value):
+        self._settings["hash_threshold"] = value
+        self._saveSettings()
 
-    # TODO ADD GETTER FOR self._to_post
+    @property
+    def subreddits(self):
+        return self._settings["subreddits"]
+
+    @subreddits.setter
+    def subreddits(self, list):
+        self._settings["subreddits"] = [sub for sub in list]
+        self._saveSettings()
+
+    @property
+    def wordstoskip(self):
+        return self._settings["words_to_skip"]
+
+    @wordstoskip.setter
+    def wordstoskip(self, list):
+        print(list)
+        self._settings["words_to_skip"] = [word.lower() for word in list]
+        self._saveSettings()
+
+    @property
+    def new_url(self):
+        # consumes and returns new post
+        if len(self._post_queue) == 0:
+            return None
+
+        self._updatePosted()
+        return self._post_queue.pop(0)["url"]
+
+    @property
+    def queue(self):
+        return self._post_queue
+
+    @property
+    def settings(self):
+        return self._settings
 
 
 def main():
