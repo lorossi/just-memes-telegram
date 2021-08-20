@@ -1,4 +1,6 @@
-#!/usr/bin/env bash
-cd /home/pi/scripts/just-memes-telegram
+cd /
+cd /home/pi/python_scripts/just-memes-telegram/
 python3 just-memes-telegram.py &
+cd /
+
 
