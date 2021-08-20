@@ -1,6 +1,6 @@
 *.log
 .vscode
 __pycache__
-settings.json
+settings*.json
 posted.json
 discarded.json

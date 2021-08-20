@@ -17,7 +17,7 @@ class Telegram:
     reset - reloads the bot
     stop - stops the bot
     nextpost - show at what time the next post is
-    queue - view queue  and add image(s) url(s) to queue
+    queue - view queue and add image(s) url(s) to queue
     subreddits - views and sets source subreddits
     postsperday - views and sets number of posts per day
     wordstoskip - view and sets a list of words to skip
@@ -115,6 +115,7 @@ class Telegram:
         )
 
     # Bot routines
+
     def _botStartupRoutine(self, context: CallbackContext):
         self._setMemesRoutineInterval()
 
@@ -175,7 +176,6 @@ class Telegram:
         caption = self._settings["caption"]
         logging.info(f"Sending image with url {new_url}")
 
-        # fix this it's ugly
         count = 0
         max_retries = self._settings["max_retries"]
         while True:
@@ -205,7 +205,6 @@ class Telegram:
         logging.info("Sending memes routine completed")
 
     def _botError(self, update, context):
-
         message = "*ERROR RAISED*"
         # admin message
         for chat_id in self._admins:
@@ -331,21 +330,14 @@ class Telegram:
                     sort_keys=True
                 )
             )
-
-            context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN
-            )
-
         else:
             message = "*This command is for admins only*"
 
-            context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN
-            )
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode=ParseMode.MARKDOWN
+        )
 
     def _botNextpostCommand(self, update, context):
         chat_id = update.effective_chat.id
@@ -413,7 +405,6 @@ class Telegram:
         )
 
     def _botSubredditsCommand(self, update, context):
-        # TODO FIX THIS
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
@@ -482,7 +473,6 @@ class Telegram:
         )
 
     def _botWordstoskipCommand(self, update, context):
-        # TODO does not work
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:

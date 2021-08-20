@@ -21,6 +21,7 @@ class Reddit:
         self._posts = []  # list of fetched posts
         self._post_queue = []  # list of next post
         self._posted = []  # list of post that have been already posted
+        self._discarded = []
         self._to_discard = []  # list of posts to discard
         self._settings = {}
         self._settings_path = "settings/settings.json"
@@ -161,7 +162,7 @@ class Reddit:
 
     def _isAlreadyDiscarded(self, post):
         for discarded in self._discarded:
-            if "id" in post and "id" in discarded:
+            if post["id"] and discarded["id"]:
                 if post["id"] == discarded["id"]:
                     logging.info(
                         f"Post id {discarded['id']} has "
@@ -216,7 +217,7 @@ class Reddit:
                 )
                 return True
 
-            if "caption" in posted and "caption" in fingerprint:
+            if fingerprint["caption"] and posted["caption"]:
                 if fingerprint["caption"] == posted["caption"]:
                     logging.info(
                         f"Post with caption {posted['caption']} "
@@ -434,6 +435,8 @@ class Reddit:
             "url": url,
             "hash": fingerprint["string_hash"],
             "caption":  fingerprint["caption"],
+            "id": None,
+            "timestamp": datetime.now().isoformat(),
         })
 
     def cleanQueue(self):
@@ -498,7 +501,7 @@ def main():
     logging.basicConfig(
         filename=__file__.replace(".py", ".log"),
         level=logging.INFO,
-        format='%(asctime)s %(levelname)s %(message)s',
+        format="%(asctime)s %(levelname)s %(message)s",
         filemode="w"
     )
 
