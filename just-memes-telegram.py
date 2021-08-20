@@ -53,6 +53,14 @@ class Telegram:
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
 
+    def _escapeMarkdown(self, str):
+        escaped = str.replace("_", "\\_")
+        escaped = escaped.replace("*", "\\*")
+        escaped = escaped.replace("[", "\\[")
+        escaped = escaped.replace("`", "\\`")
+
+        return escaped
+
     def _calculateTiming(self):
         # Calculates seconds between posts and until next post
         self._minutes_between_messages = int(
@@ -289,55 +297,45 @@ class Telegram:
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
-            # first, post telegram status
-            message = "_Telegram status_"
-            context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN
-            )
-            message = ujson.dumps(
-                self._settings,
-                indent=2,
-                sort_keys=True
-            )
-            context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
+            # first, post bot status
+            message = "*Bot status*\n"
+            message += f"Version: {self._version}"
+            # every dump is replaced to escape the underscore
+
+            # then, post telegram status
+            message += "\n\n*Telegram status*\n"
+            message += self._escapeMarkdown(
+                ujson.dumps(
+                    self._settings,
+                    indent=4,
+                    sort_keys=True
+                )
             )
 
             # then, next post status
-            message = "_Next post status_"
-            context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN
-            )
-            message = ujson.dumps(
-                self._calculateTiming(),
-                indent=2,
-                sort_keys=True
-            )
-            context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
+            message += "\n\n*Next post status*\n"
+            message += self._escapeMarkdown(
+                ujson.dumps(
+                    self._calculateTiming(),
+                    indent=4,
+                    sort_keys=True
+                )
             )
 
             # then, post reddit status
-            message = "_Reddit status_"
+            message += "\n\n*Reddit status*\n"
+            message += self._escapeMarkdown(
+                ujson.dumps(
+                    self._reddit.settings,
+                    indent=4,
+                    sort_keys=True
+                )
+            )
+
             context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
                 parse_mode=ParseMode.MARKDOWN
-            )
-            message = ujson.dumps(
-                self._reddit.settings,
-                indent=2,
-                sort_keys=True
-            )
-            context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
             )
 
         else:
@@ -784,25 +782,25 @@ class Telegram:
         logging.info("Bot running")
         self._updater.idle()
 
-    @property
+    @ property
     def _posts_per_day(self):
         return self._settings["posts_per_day"]
 
-    @_posts_per_day.setter
+    @ _posts_per_day.setter
     def _posts_per_day(self, value):
         self._settings["posts_per_day"] = value
         self._saveSettings()
 
-    @property
+    @ property
     def _start_delay(self):
         return self._settings["start_delay"]
 
-    @_start_delay.setter
+    @ _start_delay.setter
     def _start_delay(self, value):
         self._settings["start_delay"] = value
         self._saveSettings()
 
-    @property
+    @ property
     def _admins(self):
         return self._settings["admins"]
 
