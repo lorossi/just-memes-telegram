@@ -1,0 +1,24 @@
+{
+  "Reddit": {
+    "id": "",
+    "token": "",
+    "request_limit": 5,
+    "subreddits": [],
+    "posted_file": "settings/posted.json",
+    "discarded_file": "settings/discarded.json",
+    "max_days": 28,
+    "tesseract_path": "",
+    "words_to_skip": [],
+    "hash_threshold": 20,
+    "ocr": true
+  },
+  "Telegram": {
+    "token": "",
+    "channel_name": "",
+    "caption": "",
+    "posts_per_day": 92,
+    "start_delay": 0,
+    "max_retries": 5,
+    "admins": []
+  }
+}
