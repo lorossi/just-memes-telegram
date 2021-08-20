@@ -41,8 +41,6 @@ class Reddit:
 
         old_settings["Reddit"].update(self._settings)
 
-        print(ujson.dumps(old_settings, indent=2))
-
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
 
@@ -475,7 +473,6 @@ class Reddit:
 
     @wordstoskip.setter
     def wordstoskip(self, list):
-        print(list)
         self._settings["words_to_skip"] = [word.lower() for word in list]
         self._saveSettings()
 
