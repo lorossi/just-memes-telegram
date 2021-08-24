@@ -190,7 +190,7 @@ class Reddit:
         # we found at leat a post
         return len(self._posts)
 
-    def _isAlreadyDiscarded(self, post):  # sourcery skip: merge-nested-ifs
+    def _isAlreadyDiscarded(self, post):
         """Checks if the post has already been discarded
 
         Args:
@@ -200,9 +200,6 @@ class Reddit:
             [boolean]
         """
 
-        if not self._discarded:
-            return False
-
         for discarded in self._discarded:
             if post["id"] and discarded["id"]:
                 if post["id"] == discarded["id"]:
@@ -211,39 +208,7 @@ class Reddit:
             if post["url"] == discarded["url"]:
                 return True
 
-    def _isARepost(self, fingerprint):
-        """Checks if the image has already been posted, thanks to its fingerprint
-
-        Args:
-            fingerprint [dict]: Fingerprint created from _imageFingerprint
-
-        Returns:
-            [boolen]
-        """
-        # sourcery skip: merge-nested-ifs
-        for posted in self._posted:
-            # check caption
-            if fingerprint["caption"] and posted["caption"]:
-                if fingerprint["caption"] == posted["caption"]:
-                    return True
-
-            # check if hashes have been calculated for both posts
-            # and if so, compare them
-            # old hash, has to be loaded from string
-            if posted["hash"]:
-                posted_hash = imagehash.hex_to_hash(posted["hash"])
-                difference = fingerprint["hash"] - posted_hash
-
-                # if the images are too similar
-                if difference < self._settings["hash_threshold"]:
-                    logging.info(f"Hash difference: {difference}")
-                    # don't post it
-                    return True
-
-        return False
-
     def _containsSkipWords(self, post, fingerprint):
-        # sourcery skip: return-identity
         """Checks if the post contains words to be skipped
 
         Args:
@@ -270,8 +235,7 @@ class Reddit:
 
         return False
 
-    def _isAlreadyPosted(self, post):
-        # sourcery skip: merge-nested-ifs
+    def _isAlreadyPosted(self, post):  # sourcery skip: merge-nested-ifs
         """Checks if the post has already been posted
 
         Args:
@@ -280,6 +244,7 @@ class Reddit:
         Returns:
             [boolean]
         """
+
         for posted in self._posted:
             # check post reddit id
             if "id" in post and "id" in posted:
@@ -378,6 +343,9 @@ class Reddit:
             self._post_queue.append(new_post)
             # update discarded list
             self._updateDiscarded(to_discard)
+
+            # we found a post
+            self._post_queue.append(post)
 
             return True
 
@@ -537,7 +505,7 @@ class Reddit:
         """Add post by providing an url
 
         Args:
-            url (string): Image url
+            url(string): Image url
         """
         fingerprint = self._imageFingerprint(
             url,
