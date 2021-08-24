@@ -11,8 +11,8 @@ from reddit import Reddit
 
 
 class Telegram:
-    """ Class that handles all the Telegram stuff
-
+    # Class that handles all the Telegram stuff
+    '''
     BOTFATHER commands description
     start - view start message
     reset - reloads the bot
@@ -28,11 +28,11 @@ class Telegram:
     startdelay - set delay (minutes after midnight) to start posting
     cleanqueue - cleans queue
     status - show some infos about the bot
-    version - show bot version
-    """
+    channelname - show the destination channel name
+    '''
 
     def __init__(self):
-        self._version = "1.8.2b"  # current bot version
+        self._version = "1.7.2"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._r = None
@@ -742,6 +742,23 @@ class Telegram:
             parse_mode=ParseMode.MARKDOWN
         )
 
+    def _botChannelnameCommand(self, update, context):
+        chat_id = update.effective_chat.id
+        if chat_id in self._admins:
+            escaped_name = self._escapeMarkdown(self._channel_name)
+            message = (
+                "_Channel name:_ "
+                f"{escaped_name}"
+            )
+        else:
+            message = "*This command is for admins only*"
+
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode=ParseMode.MARKDOWN
+        )
+
     def start(self):
         """ Function that starts the bot in all its components """
 
@@ -869,11 +886,16 @@ class Telegram:
             )
         )
 
+        # hidden command, not in list
         self._dispatcher.add_handler(
             CommandHandler(
                 "version",
                 self._botVersionCommand
             )
+        )
+
+        self._dispatcher.add_handler(
+            CommandHandler("channelname", self._botChannelnameCommand)
         )
 
         # this handler will notify the admins and the user if something went
@@ -921,6 +943,10 @@ class Telegram:
     def _admins(self):
         """ Getter for the admins list """
         return self._settings["admins"]
+
+    @ property
+    def _channel_name(self):
+        return self._settings["channel_name"]
 
 
 def main():
