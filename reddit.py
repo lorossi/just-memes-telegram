@@ -200,6 +200,9 @@ class Reddit:
             [boolean]
         """
 
+        if not self._discarded:
+            return False
+
         for discarded in self._discarded:
             if post["id"] and discarded["id"]:
                 if post["id"] == discarded["id"]:
@@ -244,6 +247,19 @@ class Reddit:
         Returns:
             [boolean]
         """
+
+        if not self._posted:
+            return False
+
+        fingerprint = self._imageFingerprint(
+            post["url"],
+            hash=self._settings["hash_threshold"] > 0,
+            ocr=self._settings["ocr"],
+        )
+
+        if not fingerprint:
+            logging.error(f"Couldn't fingerprint image {post['url']}")
+            return
 
         for posted in self._posted:
             # check post reddit id
