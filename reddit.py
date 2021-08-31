@@ -190,7 +190,7 @@ class Reddit:
         # we found at leat a post
         return len(self._posts)
 
-    def _isAlreadyDiscarded(self, post):
+    def _isAlreadyDiscarded(self, post):  # sourcery skip: merge-nested-ifs
         """Checks if the post has already been discarded
 
         Args:
