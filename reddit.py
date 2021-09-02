@@ -55,7 +55,8 @@ class Reddit:
             return
         except FileNotFoundError:
             logging.info("Posted file not found. Creating it.")
-            self._posted = []
+
+        self._posted = []
 
     def _loadDiscarded(self):
         """Loads list of already discarded urls """
@@ -66,7 +67,8 @@ class Reddit:
             return
         except FileNotFoundError:
             logging.info("Discarded file not found. Creating it.")
-            self._discarded = []
+
+        self._discarded = []
 
     def _login(self):
         """Logins into Reddit app api """
