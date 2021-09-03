@@ -55,8 +55,7 @@ class Reddit:
             return
         except FileNotFoundError:
             logging.info("Posted file not found. Creating it.")
-
-        self._posted = []
+            self._posted = []
 
     def _loadDiscarded(self):
         """Loads list of already discarded urls """
@@ -67,8 +66,7 @@ class Reddit:
             return
         except FileNotFoundError:
             logging.info("Discarded file not found. Creating it.")
-
-        self._discarded = []
+            self._discarded = []
 
     def _login(self):
         """Logins into Reddit app api """
@@ -214,6 +212,7 @@ class Reddit:
                 return True
 
     def _containsSkipWords(self, post, fingerprint):
+        # sourcery skip: return-identity
         """Checks if the post contains words to be skipped
 
         Args:
@@ -225,11 +224,8 @@ class Reddit:
         lower_title = post["title"].lower()
 
         # if the post has no title, just return false
-        if lower_title and any(
-            word in lower_title for word in self._settings["words_to_skip"]
-        ):
-            # we found one of the words to skip
-            return True
+        if not lower_title:
+            return False
 
         lower_caption = fingerprint["caption"].lower()
         # check if the title contains one of the words to skip
@@ -240,7 +236,8 @@ class Reddit:
 
         return False
 
-    def _isAlreadyPosted(self, post):  # sourcery skip: merge-nested-ifs
+    def _isAlreadyPosted(self, post, fingerprint):
+        # sourcery skip: merge-nested-ifs
         """Checks if the post has already been posted
 
         Args:
@@ -253,12 +250,6 @@ class Reddit:
         if not self._posted:
             return False
 
-        fingerprint = self._imageFingerprint(
-            post["url"],
-            hash=self._settings["hash_threshold"] > 0,
-            ocr=self._settings["ocr"],
-        )
-
         if not fingerprint:
             logging.error(f"Couldn't fingerprint image {post['url']}")
             return
@@ -268,11 +259,35 @@ class Reddit:
             if "id" in post and "id" in posted:
                 if post["id"] == posted["id"]:
                     return True
-
             # check post url
             if post["url"] == posted["url"]:
                 return True
 
+            # check caption
+            if fingerprint["caption"] and posted["caption"]:
+                if fingerprint["caption"] == posted["caption"]:
+                    return True
+
+            # check if hashes have been calculated for both posts
+            # and if so, compare them
+            if not fingerprint["hash"]:
+                logging.info(f"Skipping hash for {post['id']}")
+            elif not posted["hash"]:
+                logging.info(f"Skipping hash already posted {post['id']}")
+            else:
+                # old hash, has to be loaded from string
+                posted_hash = imagehash.hex_to_hash(posted["hash"])
+                difference = fingerprint["hash"] - posted_hash
+
+                # if the images are too similar
+                if difference < self._settings["hash_threshold"]:
+                    self._to_discard.append(post)
+                    # don't post it
+                    return True
+
+        # post has not been found
+        post["hash"] = fingerprint["string_hash"]
+        post["caption"] = fingerprint["caption"]
         return False
 
     def _findNew(self):  # sourcery skip: extract-method
@@ -315,35 +330,33 @@ class Reddit:
                 f"Post url: {post['url']}"
             )
 
-            # check if the image has already been posted
-            if self._isAlreadyPosted(post):
-                logging.info("It has already been posted")
-                continue
-
-            # check if the same post has already been discarded
+            logging.info(
+                "Trying to check if the post has already been discarded"
+            )
             if self._isAlreadyDiscarded(post):
-                logging.info("It has already been discarded")
+                logging.info(f"url {post['url']} has already been discarded")
                 continue
 
+            logging.info("Loading fingerprint")
             # load fingerprint
             fingerprint = self._imageFingerprint(
                 post["url"],
                 ocr=self._settings["ocr"],
                 hash=self._settings["hash_threshold"] > 0,
             )
-            logging.info("Post fingerprinted")
 
-            if not fingerprint:
-                logging.error("Couldn't fingerprint image")
-                continue
-            if not fingerprint["hash"]:
-                logging.error("Couldn't hash image")
-                continue
-
-            # check if the image constains banned words
+            logging.info(
+                "Trying to check if the post constains skip words"
+            )
             if self._containsSkipWords(post, fingerprint):
-                logging.info("It contains banned words")
-                to_discard.append(post)
+                logging.info(f"url {post['url']} contains banned words")
+                continue
+
+            logging.info(
+                "Trying to check if the post has already been posted"
+            )
+            if self._isAlreadyPosted(post, fingerprint):
+                logging.info(f"url {post['url']} has already been posted")
                 continue
 
             # check if the image is a repost
@@ -363,7 +376,10 @@ class Reddit:
             self._updateDiscarded(to_discard)
 
             # we found a post
+            logging.info(f"Adding post {post['url']} to queue")
             self._post_queue.append(post)
+            # update discarded list
+            self._updateDiscarded()
 
             return True
 

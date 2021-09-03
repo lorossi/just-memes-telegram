@@ -401,16 +401,17 @@ class Telegram:
         )
 
     def _botNextpostCommand(self, update, context):
-        """ Function handling nextpost command """
         logging.info("Called next post command")
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
             timing = self._calculateTiming()
-            if timing["next_post_timestamp_no_preload"]:
+            if timing["timestamp"]:
                 message = (
-                    "_The next meme is scheduled at:_ "
-                    f"{timing['next_post_timestamp_no_preload']}"
+                    "_The next meme is scheduled for:_\n"
+                    f"{timing['timestamp']}\n"
+                    f"_That is_ {timing['seconds_until']} "
+                    "_seconds from now._\n"
                 )
             else:
                 message = (
