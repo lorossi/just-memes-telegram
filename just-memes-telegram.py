@@ -32,7 +32,7 @@ class Telegram:
     '''
 
     def __init__(self):
-        self._version = "1.8.1"  # current bot version
+        self._version = "1.8.1b"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._r = None
