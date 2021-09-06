@@ -396,7 +396,7 @@ class Telegram:
             if timing["next_post_timestamp_no_preload"]:
                 message = (
                     "_The next meme is scheduled at:_ "
-                    f"{timing['next_post_timestamp']}"
+                    f"{timing['next_post_timestamp_no_preload']}"
                 )
             else:
                 message = (
