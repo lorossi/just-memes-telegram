@@ -368,10 +368,10 @@ class Reddit:
 
         logging.info("Posted list saved")
 
-    def _updateDiscarded(self):
+    def _updateDiscarded(self, to_discard):
         """Updates the file of already discarded urls"""
         # Update discarded file
-        if not self._to_discard:
+        if not to_discard:
             return
 
         # update discarded file
@@ -381,7 +381,7 @@ class Reddit:
         except FileNotFoundError:
             discarded_data = []
 
-        for dict in self._to_discard:
+        for dict in to_discard:
             discarded_data.append(dict)
 
         with open(self._settings["discarded_file"], "w") as json_file:
@@ -395,6 +395,10 @@ class Reddit:
         they are, in fact, new
         """
         logging.info("Fetching new memes...")
+
+        if len(self._post_queue) > 0:
+            logging.info("Meme already in queue")
+            return
 
         while self._loadPosts() == 0:
             # Something went wrong, we cannot load new posts. Maybe reddit is
