@@ -28,11 +28,11 @@ class Telegram:
     cleanqueue - cleans queue
     cleanpostedlist - cleans list of posted memes
     status - show some infos about the bot
-    channelname - show the destination channel name
+    version - show bot version
     '''
 
     def __init__(self):
-        self._version = "1.8.1.1b"  # current bot version
+        self._version = "1.8.1.2b"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._r = None
@@ -657,13 +657,13 @@ class Telegram:
             parse_mode=ParseMode.MARKDOWN
         )
 
-    def _botChannelnameCommand(self, update, context):
+    def _botVersionCommand(self, update, context):
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
-            escaped_name = self._escapeMarkdown(self._channel_name)
+            escaped_version = self._escapeMarkdown(self._version)
             message = (
-                "_Channel name:_ "
-                f"{escaped_name}"
+                "_Version:_ "
+                f"{escaped_version}"
             )
         else:
             message = "*This command is for admins only*"
@@ -799,7 +799,7 @@ class Telegram:
         )
 
         self._dispatcher.add_handler(
-            CommandHandler("channelname", self._botChannelnameCommand)
+            CommandHandler("version", self._botVersionCommand)
         )
 
         # this handler will notify the admins and the user if something went
