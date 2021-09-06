@@ -59,12 +59,10 @@ class Telegram:
             ujson.dump(old_settings, outfile, indent=2)
 
     def _escapeMarkdown(self, str):
-        escaped = str.replace("_", "\\_")
-        escaped = escaped.replace("*", "\\*")
-        escaped = escaped.replace("[", "\\[")
-        escaped = escaped.replace("`", "\\`")
-
-        return escaped
+        to_replace = ["_", "*", "[", "`"]
+        for replace in to_replace:
+            str = str.replace(replace, f"\\{replace}")
+        return to_replace
 
     def _calculateTiming(self):
         """ Calculates seconds between posts and until next post"""
