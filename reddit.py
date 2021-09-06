@@ -320,18 +320,18 @@ class Reddit:
         # current loaded posts
         for post in self._posts:
             logging.info(
-                "Trying to check if the post has already been discarded. "
+                "Trying to check if post is ok "
                 f"Post url: {post['url']}"
             )
-
-            # check if the same post has already been discarded
-            if self._isAlreadyDiscarded(post):
-                logging.info("It has already been discarded")
-                continue
 
             # check if the image has already been posted
             if self._isAlreadyPosted(post):
                 logging.info("It has already been posted")
+                continue
+
+            # check if the same post has already been discarded
+            if self._isAlreadyDiscarded(post):
+                logging.info("It has already been discarded")
                 continue
 
             # load fingerprint
@@ -357,7 +357,7 @@ class Reddit:
 
             # check if the image is a repost
             if self._isARepost(fingerprint):
-                logging.info(f"It is a repost of post {post['url']}")
+                logging.info("It is a repost")
                 to_discard.append(post)
                 continue
 

@@ -96,14 +96,15 @@ class Telegram:
         next_post = midnight
         while next_post - preload_time <= now:
             next_post += minutes_between_messages
-
+        # Do the same but without accounting for preload
         next_post_no_preload = midnight
-        while next_post_no_preload - preload_time <= now:
+        while next_post_no_preload <= now:
             next_post_no_preload += minutes_between_messages
 
         # To avoid rounding errors we recalculate the current time
         now = datetime.now()
-        # we add 30 seconds to actual time in order to make it closer to the real deal
+        # we add 30 seconds to actual time in order to make it closer to
+        # the real deal
         seconds_until_next_post = (next_post - now).seconds + 30
         seconds_until_next_preload = (next_post - now - preload_time).seconds
 
