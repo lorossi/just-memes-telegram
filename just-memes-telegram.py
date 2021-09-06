@@ -32,7 +32,7 @@ class Telegram:
     '''
 
     def __init__(self):
-        self._version = "1.8.1.3b"  # current bot version
+        self._version = "1.8.1.4b"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._r = None
@@ -210,7 +210,7 @@ class Telegram:
                     f"Try {count} of {max_retries}"
                 )
 
-                if (count == max_retries):
+                if count == max_retries:
                     logging.error("Could not send the image. Aborting.")
                     break
 

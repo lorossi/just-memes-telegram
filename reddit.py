@@ -251,7 +251,7 @@ class Reddit:
 
         return False
 
-    def _isARepost(self, post, fingerprint):
+    def _isARepost(self, fingerprint):
         # sourcery skip: merge-nested-ifs
         for posted in self._posted:
             # check caption
@@ -325,6 +325,7 @@ class Reddit:
                 ocr=self._settings["ocr"],
                 hash=self._settings["hash_threshold"] > 0,
             )
+            logging.info("Post fingerprinted")
 
             # check if the image has already been posted
             if self._isAlreadyPosted(post):
@@ -345,7 +346,7 @@ class Reddit:
                 continue
 
             # check if the image is a repost
-            if self._isARepost(post, fingerprint):
+            if self._isARepost(fingerprint):
                 logging.info("It is a repost")
                 to_discard.append(post)
                 continue
