@@ -163,7 +163,8 @@ class Telegram:
             context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode=ParseMode.MARKDOWN,
+                disable_notification=True
             )
 
         removed = self._reddit.cleanPosted()
@@ -188,7 +189,8 @@ class Telegram:
             context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode=ParseMode.MARKDOWN,
+                disable_notification=True
             )
 
         logging.info("New day routine ended")
