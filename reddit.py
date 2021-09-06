@@ -268,6 +268,7 @@ class Reddit:
 
                 # if the images are too similar
                 if difference < self._settings["hash_threshold"]:
+                    logging.info(f"Hash difference: {difference}")
                     # don't post it
                     return True
 
@@ -319,6 +320,11 @@ class Reddit:
                 logging.info("It has already been discarded")
                 continue
 
+            # check if the image has already been posted
+            if self._isAlreadyPosted(post):
+                logging.info("It has already been posted")
+                continue
+
             # load fingerprint
             fingerprint = self._imageFingerprint(
                 post["url"],
@@ -326,11 +332,6 @@ class Reddit:
                 hash=self._settings["hash_threshold"] > 0,
             )
             logging.info("Post fingerprinted")
-
-            # check if the image has already been posted
-            if self._isAlreadyPosted(post):
-                logging.info("It has already been posted")
-                continue
 
             if not fingerprint:
                 logging.error("Couldn't fingerprint image")
@@ -347,7 +348,7 @@ class Reddit:
 
             # check if the image is a repost
             if self._isARepost(fingerprint):
-                logging.info("It is a repost")
+                logging.info(f"It is a repost of post {post['url']}")
                 to_discard.append(post)
                 continue
 
