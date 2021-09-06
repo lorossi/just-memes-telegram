@@ -12,10 +12,12 @@ from datetime import datetime
 
 
 class Reddit:
-    # This class handles all the connections to Reddit, including:
-    # ---Post Fetching
-    # ---Image OCR to prevent Reddit-only memes to be posted on Telegram
-    # ---Image Hashing to prevent reposts to be posted on Telegram
+    """
+     This class handles all the connections to Reddit, including:
+    ---Post Fetching
+    ---Image OCR to prevent Reddit-only memes to be posted on Telegram
+    ---Image Hashing to prevent reposts to be posted on Telegram
+    """
 
     def __init__(self):
         self._posts = []  # list of fetched posts
@@ -29,49 +31,63 @@ class Reddit:
         self._login()
 
     def _loadSettings(self):
-        # loads settings from file
+        """Loads settings from file """
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Reddit"]
         logging.info("Settings loaded")
 
     def _saveSettings(self):
-        # Save all object settings to file
+        """Saves all settings to file """
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
         # update old dictionary
-        old_settings["Reddit"] |= self._settings
+        old_settings["Reddit"].update(self._settings)
 
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
 
     def _loadPosted(self):
-        # Load posted file
+        """Loads list of already posted urls """
         try:
             with open(self._settings["posted_file"]) as json_file:
                 self._posted = ujson.load(json_file)
             logging.info("Loaded posted file")
+            return
         except FileNotFoundError:
             logging.info("Posted file not found. Creating it.")
             self._posted = []
 
     def _loadDiscarded(self):
-        # Load discarded file
+        """Loads list of already discarded urls """
         try:
             with open(self._settings["discarded_file"]) as json_file:
                 self._discarded = ujson.load(json_file)
             logging.info("Loaded discarded file")
+            return
         except FileNotFoundError:
             logging.info("Discarded file not found. Creating it.")
             self._discarded = []
 
     def _login(self):
-        # Login to Reddit app api
-        self.reddit = praw.Reddit(client_id=self._settings["id"],
-                                  client_secret=self._settings["token"],
-                                  user_agent='PC')
+        """Logins into Reddit app api """
+        self.reddit = praw.Reddit(
+            client_id=self._settings["id"],
+            client_secret=self._settings["token"],
+            user_agent='PC'
+        )
 
     def _imageFingerprint(self, url, hash=True, ocr=True):
+        """Fingerprints an image by providing its url
+
+        Args:
+            url (string): Image URL
+            hash (bool, optional): Should the image be hashed?
+            ocr (bool, optional): Should the image be scanned with OCR?
+
+        Returns:
+            [dict]: dict containing a hash, string_hash and caption
+        """
         try:
             r = requests.get(url, stream=True)
             # handle spurious Content-Encoding
@@ -109,6 +125,11 @@ class Reddit:
         }
 
     def _loadPosts(self):
+        """Loads posts from reddit
+
+        Returns:
+            [int]: [number of posts loaded]
+        """
         logging.info("Loading new posts...")
         # Loads new posts
         now = datetime.now()  # current date and time
@@ -155,99 +176,110 @@ class Reddit:
                 }
             )
 
-        logging.info(f"{len(self._posts)} posts loaded")
         # we found at leat a post
         return len(self._posts)
 
-    def _isAlreadyDiscarded(self, post):
+    def _isAlreadyDiscarded(self, post):  # sourcery skip: merge-nested-ifs
+        """Checks if the post has already been discarded
+
+        Args:
+            post [dict]: Post as created by _loadPosts
+
+        Returns:
+            [boolean]
+        """
+
+        if not self._discarded:
+            return False
+
         for discarded in self._discarded:
             if post["id"] and discarded["id"]:
                 if post["id"] == discarded["id"]:
-                    logging.info(
-                        f"Post id {discarded['id']} has "
-                        "already been discarded"
-                    )
                     return True
 
             if post["url"] == discarded["url"]:
-                logging.info(
-                    f"url { post['url']} has already been discarded"
-                )
                 return True
 
-    def _containsSkipWords(self, post):
+    def _containsSkipWords(self, post, fingerprint):
+        # sourcery skip: return-identity
+        """Checks if the post contains words to be skipped
+
+        Args:
+            post [dict]: Post as created by _loadPosts
+
+        Returns:
+            [boolean]
+        """
         lower_title = post["title"].lower()
+
+        # if the post has no title, just return false
+        if lower_title and any(
+            word in lower_title for word in self._settings["words_to_skip"]
+        ):
+            # we found one of the words to skip
+            return True
+
+        lower_caption = fingerprint["caption"].lower()
         # check if the title contains one of the words to skip
-        if any(word in lower_title for word in
+        if any(word in lower_caption for word in
                self._settings["words_to_skip"]):
             # we found one of the words to skip
-            logging.warning(
-                f"REPOST: title contains banned word(s). "
-                f"Title: {post['title']}"
-            )
             return True
 
         return False
 
-    def _isAlreadyPosted(self, post):  # sourcery skip: merge-nested-ifs
-        fingerprint = self._imageFingerprint(
-            post["url"],
-            hash=self._settings["hash_threshold"] > 0,
-            ocr=self._settings["ocr"],
-        )
+    def _isAlreadyPosted(self, post, fingerprint):
+        # sourcery skip: merge-nested-ifs
+        """Checks if the post has already been posted
 
-        if not fingerprint:
-            logging.error(f"Couldn't fingerprint image {post['url']}")
-            return
+        Args:
+            post [dict]: Post as created by _loadPosts
+
+        Returns:
+            [boolean]
+        """
+
+        if not self._posted:
+            return False
 
         for posted in self._posted:
-            posted_hash = imagehash.hex_to_hash(posted["hash"])  # old hash
-            # this meme has already been posted...
+            # check post reddit id
             if "id" in post and "id" in posted:
                 if post["id"] == posted["id"]:
-                    logging.info(
-                        f"Post id {posted['id']} has already been posted"
-                    )
                     return True
-
+            # check post url
             if post["url"] == posted["url"]:
-                logging.info(
-                    f"url {posted['url']} has already been posted"
-                )
                 return True
 
+            # check caption
             if fingerprint["caption"] and posted["caption"]:
                 if fingerprint["caption"] == posted["caption"]:
-                    logging.info(
-                        f"Post with caption {posted['caption']} "
-                        "has already been posted"
-                    )
                     return True
 
-            if not fingerprint["hash"]:
-                logging.info(f"Skipping hash for {post['id']}")
-            else:
-                difference = fingerprint["hash"] - posted_hash
+            # check if hashes have been calculated for both posts
+            # and if so, compare them
+            # old hash, has to be loaded from string
+            posted_hash = imagehash.hex_to_hash(posted["hash"])
+            difference = fingerprint["hash"] - posted_hash
+
             # if the images are too similar
-                if difference < self._settings["hash_threshold"]:
-                    self._to_discard.append(post)
-                    # it's a repost
-                    logging.warning(
-                        f"REPOST: {post['id']} is too similar to "
-                        f"{posted['id']}. "
-                        f"similarity: {difference}",
-                    )
-                    self._updateDiscarded()
-                    # don't post it
-                    return True
+            if difference < self._settings["hash_threshold"]:
+                self._to_discard.append(post)
+                # don't post it
+                return True
 
+        # post has not been found
         post["hash"] = fingerprint["string_hash"]
         post["caption"] = fingerprint["caption"]
         return False
 
     def _findNew(self):  # sourcery skip: extract-method
-        # Checks if new posts loaded (currently in self.posts list) are in fact
-        # new or just a repost.
+        """Find new posts from the list of already loaded posts
+        inside self._post list, as loaded by self._loadPosts
+
+        Returns:
+            [boolean]: Have new posts been found?
+        """
 
         logging.info("Finding new posts..")
 
@@ -260,7 +292,7 @@ class Reddit:
         self._to_discard = []  # list of posts
 
         # If no meme has been posted yet, there's no need to check
-        if len(self._posted) == 0 and len(self._discarded) == 0:
+        if not self._posted:
             logging.info("No meme has been posted before!")
 
             fingerprint = self._imageFingerprint(
@@ -275,26 +307,49 @@ class Reddit:
 
             return True
 
+        logging.info(
+            "Trying to check if the post has already been discarded"
+        )
+
         # current loaded posts
         for post in self._posts:
 
+            # check if the same post has already been discarded
             if self._isAlreadyDiscarded(post):
                 continue
 
-            if self._containsSkipWords(post):
+            # load fingerprint
+            fingerprint = self._imageFingerprint(
+                post["url"],
+                ocr=self._settings["ocr"],
+                hash=self._settings["hash_threshold"] > 0,
+            )
+
+            if not fingerprint:
+                logging.error(f"Couldn't fingerprint image {post['url']}")
                 continue
 
-            if self._isAlreadyPosted(post):
+            # check if the image constains banned words
+            if self._containsSkipWords(post, fingerprint):
                 continue
 
+            # check if the image has already been posted
+            if self._isAlreadyPosted(post, fingerprint):
+                continue
+
+            # we found a post!
+            logging.info(f"Adding post {post['url']} to queue")
             self._post_queue.append(post)
-            # we found a post
+            # update discarded list
+            self._updateDiscarded()
+
             return True
 
+        # nothing found, return false
         return False
 
     def _updatePosted(self):
-        # Update posted file
+        """Updates the file of already posted urls"""
         try:
             with open(self._settings["posted_file"], "r") as json_file:
                 posted_data = ujson.load(json_file)
@@ -309,6 +364,7 @@ class Reddit:
         logging.info("Posted list saved")
 
     def _updateDiscarded(self):
+        """Updates the file of already discarded urls"""
         # Update discarded file
         if not self._to_discard:
             return
@@ -329,8 +385,10 @@ class Reddit:
         logging.info("Discarded list saved")
 
     def fetch(self):
-        # Function used to join the routine of loading posts and checking if
-        # they are in fact new
+        """
+        Function used to join the routine of loading posts and checking if
+        they are, in fact, new
+        """
         logging.info("Fetching new memes...")
 
         while self._loadPosts() == 0:
@@ -339,7 +397,7 @@ class Reddit:
             logging.info("Cannot load posts... trying again in 10s")
             sleep(10)
 
-        logging.info(f"{str(len(self._posts))} posts found!")
+        logging.info(f"{len(self._posts)} posts found!")
 
         while not self._findNew():
             # We didn't find any new post... let's wait a while and try again
@@ -350,9 +408,13 @@ class Reddit:
         logging.info("Memes fetched")
 
     def cleanPosted(self):
-        # Deletes the list of already posted subreddits
+        """Removes old posted posts from the list file
+
+        Returns:
+            [int]: Number of posts removed from file
+        """
         logging.info("Cleaning posted data...")
-        now = datetime.datetime.now()  # current date and time
+        now = datetime.now()  # current date and time
 
         try:
             with open(self._settings["posted_file"]) as json_file:
@@ -387,9 +449,13 @@ class Reddit:
         return old_count
 
     def cleanDiscarded(self):
-        # Deletes the list of already posted subreddits
+        """Removes old discarded posts from the list file
+
+        Returns:
+            [int]: Number of posts removed from file
+        """
         logging.info("Cleaning discarded data...")
-        now = datetime.datetime.now()  # current date and time
+        now = datetime.now()  # current date and time
 
         try:
             with open(self._settings["discarded_file"]) as json_file:
@@ -425,6 +491,11 @@ class Reddit:
         return discarded_count
 
     def addPost(self, url):
+        """Add post by providing an url
+
+        Args:
+            url (string): Image url
+        """
         fingerprint = self._imageFingerprint(
             url,
             hash=self._settings["hash_threshold"] > 0,
@@ -480,7 +551,7 @@ class Reddit:
     @property
     def new_url(self):
         # consumes and returns new post
-        if len(self._post_queue) == 0:
+        if not self._post_queue:
             return None
 
         self._updatePosted()

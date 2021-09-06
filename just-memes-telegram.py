@@ -12,7 +12,8 @@ from reddit import Reddit
 
 class Telegram:
     # Class that handles all the Telegram stuff
-    ''' BOTFATHER commands description
+    '''
+    BOTFATHER commands description
     start - view start message
     reset - reloads the bot
     stop - stops the bot
@@ -27,10 +28,11 @@ class Telegram:
     cleanqueue - cleans queue
     cleanpostedlist - cleans list of posted memes
     status - show some infos about the bot
+    channelname - show the destination channel name
     '''
 
     def __init__(self):
-        self._version = "1.7"  # current bot version
+        self._version = "1.8.1"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._r = None
@@ -49,7 +51,7 @@ class Telegram:
             old_settings = ujson.load(json_file)
 
         # update old dictionary
-        old_settings["Telegram"] |= self._settings
+        old_settings["Telegram"].update(self._settings)
 
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
@@ -133,7 +135,7 @@ class Telegram:
 
     def _botClearRoutine(self, context: CallbackContext):
         # sourcery skip: class-extract-method
-        message = "*New day routine!*"
+        message = "*Clear day routine!*"
         for chat_id in self._admins:
             context.bot.send_message(
                 chat_id=chat_id,
@@ -144,10 +146,20 @@ class Telegram:
         removed = self._reddit.cleanPosted()
         discarded = self._reddit.cleanDiscarded()
 
-        message = (
-            f"{removed} old posts were removed!\n"
-            f"{discarded} discarded posts were removed!"
-        )
+        message = ""
+        if removed == 0:
+            message += "No old posts have been removed.\n"
+        elif removed == 1:
+            message += "1 old post has been removed.\n"
+        else:
+            message += f"{removed} old posts were removed!\n"
+
+        if discarded == 0:
+            message += "No discarded posts have been removed.\n"
+        elif discarded == 1:
+            message += "1 discarded post has been removed.\n"
+        else:
+            message += f"{discarded} discarded posts were removed!\n"
 
         for chat_id in self._admins:
             context.bot.send_message(
@@ -342,15 +354,17 @@ class Telegram:
         )
 
     def _botNextpostCommand(self, update, context):
+        logging.info("Called next post command")
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
-            timestamp = self._calculateTiming()["timestamp"]
-
-            if timestamp:
+            timing = self._calculateTiming()
+            if timing["timestamp"]:
                 message = (
                     "_The next meme is scheduled for:_\n"
-                    f"{timestamp}"
+                    f"{timing['timestamp']}\n"
+                    f"_That is_ {timing['seconds_until']} "
+                    "_seconds from now._\n"
                 )
             else:
                 message = (
@@ -643,6 +657,23 @@ class Telegram:
             parse_mode=ParseMode.MARKDOWN
         )
 
+    def _botChannelnameCommand(self, update, context):
+        chat_id = update.effective_chat.id
+        if chat_id in self._admins:
+            escaped_name = self._escapeMarkdown(self._channel_name)
+            message = (
+                "_Channel name:_ "
+                f"{escaped_name}"
+            )
+        else:
+            message = "*This command is for admins only*"
+
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode=ParseMode.MARKDOWN
+        )
+
     def start(self):
         # create reddit object
         self._reddit = Reddit()
@@ -659,14 +690,14 @@ class Telegram:
         self._jobqueue.run_once(
             self._botStartupRoutine,
             when=1,
-            name="startup"
+            name="startup_routine"
         )
 
         # this routine will clean the posted list
         self._jobqueue.run_daily(
             self._botClearRoutine,
             time(0, 15, 0, 000000),
-            name="new_day"
+            name="new_day_routine"
         )
 
         # these are the handlers for all the commands
@@ -759,11 +790,16 @@ class Telegram:
             )
         )
 
+        # hidden command, not in list
         self._dispatcher.add_handler(
             CommandHandler(
                 "ping",
                 self._botPingCommand
             )
+        )
+
+        self._dispatcher.add_handler(
+            CommandHandler("channelname", self._botChannelnameCommand)
         )
 
         # this handler will notify the admins and the user if something went
@@ -795,6 +831,10 @@ class Telegram:
     @ property
     def _admins(self):
         return self._settings["admins"]
+
+    @ property
+    def _channel_name(self):
+        return self._settings["channel_name"]
 
 
 def main():
