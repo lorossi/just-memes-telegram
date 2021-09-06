@@ -21,6 +21,7 @@ class Telegram:
     queue - view queue and add image(s) url(s) to queue
     subreddits - views and sets source subreddits
     postsperday - views and sets number of posts per day
+    preloadtime - vies and sets preload time
     wordstoskip - view and sets a list of words to skip
     toggleocr - toggles OCR on posts
     imagethreshold - set image threshold (0 completely disables image hashing)
@@ -32,7 +33,7 @@ class Telegram:
     '''
 
     def __init__(self):
-        self._version = "1.8.1.5b"  # current bot version
+        self._version = "1.8.1.6b"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._r = None
@@ -428,7 +429,7 @@ class Telegram:
                 else:
                     message = (
                         "*The queue is empty*\n"
-                        "_Pass the links as arguments to set them_"
+                        "_Pass the links as argument to set them_"
                     )
             else:
                 for url in context.args:
@@ -458,7 +459,7 @@ class Telegram:
                 message = (
                     "_Current subreddits:_\n"
                     f"{subreddits_list}"
-                    "\n_Pass the subreddit list as arguments to set them_"
+                    "\n_Pass the subreddit list as argument to set them_"
                 )
 
             else:
@@ -483,16 +484,14 @@ class Telegram:
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
-                posts_per_day = self._posts_per_day
-
                 message = (
-                    f"_Posts per day:_ {posts_per_day}\n"
-                    f"_Pass the number of posts per day as arguments "
+                    f"_Posts per day:_ {self._posts_per_day}\n"
+                    "_Pass the number of posts per day as argument "
                     "to set a new value_"
                 )
             else:
                 try:
-                    posts_per_day = int(context.args[0])
+                    self._posts_per_day = int(context.args[0])
                 except ValueError:
                     message = "_The argument provided is not a number_"
                     context.bot.send_message(
@@ -502,11 +501,44 @@ class Telegram:
                     )
                     return
 
-                self._posts_per_day = posts_per_day
-                self._setMemesRoutineInterval()
-                self._saveSettings()
+            self._setMemesRoutineInterval()
+            # notify user
+            message = f"_Number of posts per day:_ {self._posts_per_day}"
+        else:
+            message = "*This command is for admins only*"
 
-            message = f"_Number of posts per day:_ {posts_per_day}"
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    def _botPreloadtimeCommand(self, update, context):
+        chat_id = update.effective_chat.id
+        if chat_id in self._admins:
+            if len(context.args) == 0:
+                message = (
+                    f"_Preload time:_ {self._preload_time} minutes\n"
+                    "_Pass the number of posts per day as argument "
+                    "to set a new value_"
+                )
+            else:
+                try:
+                    self._preload_time = int(context.args[0])
+                except ValueError:
+                    message = "_The argument provided is not a number_"
+                    context.bot.send_message(
+                        chat_id=chat_id,
+                        text=message,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+
+            # save value
+
+            self._setMemesRoutineInterval()
+            # notify user
+            message = f"_Preload time:_ {self._preload_time} minutes"
         else:
             message = "*This command is for admins only*"
 
@@ -525,7 +557,7 @@ class Telegram:
                 message = (
                     "_Current words to be skipped:_\n"
                     f"{words_list}"
-                    "\n_Pass the words to skip as arguments to set them "
+                    "\n_Pass the words to skip as argument to set them "
                     "(escape spaces with backslash)_"
                 )
 
@@ -575,7 +607,7 @@ class Telegram:
             if len(context.args) == 0:
                 message = (
                     f"_Current hash threshold:_ {self._reddit.threshold}"
-                    f"\n_Pass the threshold as arguments to set a new value_"
+                    f"\n_Pass the threshold as argument to set a new value_"
                 )
             else:
                 try:
@@ -611,7 +643,7 @@ class Telegram:
                 start_delay = self._start_delay
                 message = (
                     f"_Current start delay:_ {start_delay}\n"
-                    f"_Pass the threshold as arguments to set a new value_"
+                    f"_Pass the threshold as argument to set a new value_"
                 )
             else:
                 try:
@@ -769,6 +801,14 @@ class Telegram:
             CommandHandler(
                 "postsperday",
                 self._botPostsperdayCommand,
+                pass_args=True
+            )
+        )
+
+        self._dispatcher.add_handler(
+            CommandHandler(
+                "preloadtime",
+                self._botPreloadtimeCommand,
                 pass_args=True
             )
         )
