@@ -24,7 +24,6 @@ class Reddit:
         self._post_queue = []  # list of next post
         self._posted = []  # list of post that have been already posted
         self._discarded = []
-        self._to_discard = []  # list of posts to discard
         self._settings = {}
         self._settings_path = "settings/settings.json"
         self._loadSettings()
@@ -154,6 +153,8 @@ class Reddit:
                 continue
             if ".gif" in submission.url:
                 continue
+            if "gallery" in submission.url:
+                continue
 
             # fail-proof way of discovering the post's subreddit
             if submission.subreddit_name_prefixed:
@@ -259,14 +260,14 @@ class Reddit:
             # check if hashes have been calculated for both posts
             # and if so, compare them
             # old hash, has to be loaded from string
-            posted_hash = imagehash.hex_to_hash(posted["hash"])
-            difference = fingerprint["hash"] - posted_hash
+            if posted["hash"]:
+                posted_hash = imagehash.hex_to_hash(posted["hash"])
+                difference = fingerprint["hash"] - posted_hash
 
-            # if the images are too similar
-            if difference < self._settings["hash_threshold"]:
-                self._to_discard.append(post)
-                # don't post it
-                return True
+                # if the images are too similar
+                if difference < self._settings["hash_threshold"]:
+                    # don't post it
+                    return True
 
         # post has not been found
         post["hash"] = fingerprint["string_hash"]
@@ -289,7 +290,7 @@ class Reddit:
 
         # clear
         self._post_queue = []  # list of posts
-        self._to_discard = []  # list of posts
+        to_discard = []  # list of posts
 
         # If no meme has been posted yet, there's no need to check
         if not self._posted:
@@ -328,20 +329,24 @@ class Reddit:
             if not fingerprint:
                 logging.error(f"Couldn't fingerprint image {post['url']}")
                 continue
-
-            # check if the image constains banned words
-            if self._containsSkipWords(post, fingerprint):
+            if not fingerprint["hash"]:
+                logging.error(f"Couldn't hash image {post['url']}")
                 continue
 
             # check if the image has already been posted
             if self._isAlreadyPosted(post, fingerprint):
                 continue
 
+            # check if the image constains banned words
+            if self._containsSkipWords(post, fingerprint):
+                to_discard.append(post)
+                continue
+
             # we found a post!
             logging.info(f"Adding post {post['url']} to queue")
             self._post_queue.append(post)
             # update discarded list
-            self._updateDiscarded()
+            self._updateDiscarded(to_discard)
 
             return True
 
