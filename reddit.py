@@ -229,7 +229,7 @@ class Reddit:
 
         return False
 
-    def _isAlreadyPosted(self, post, fingerprint):
+    def _isAlreadyPosted(self, post):
         # sourcery skip: merge-nested-ifs
         """Checks if the post has already been posted
 
@@ -240,9 +240,6 @@ class Reddit:
             [boolean]
         """
 
-        if not self._posted:
-            return False
-
         for posted in self._posted:
             # check post reddit id
             if "id" in post and "id" in posted:
@@ -252,6 +249,11 @@ class Reddit:
             if post["url"] == posted["url"]:
                 return True
 
+        return False
+
+    def _isARepost(self, post, fingerprint):
+        # sourcery skip: merge-nested-ifs
+        for posted in self._posted:
             # check caption
             if fingerprint["caption"] and posted["caption"]:
                 if fingerprint["caption"] == posted["caption"]:
@@ -269,9 +271,6 @@ class Reddit:
                     # don't post it
                     return True
 
-        # post has not been found
-        post["hash"] = fingerprint["string_hash"]
-        post["caption"] = fingerprint["caption"]
         return False
 
     def _findNew(self):  # sourcery skip: extract-method
@@ -308,15 +307,16 @@ class Reddit:
 
             return True
 
-        logging.info(
-            "Trying to check if the post has already been discarded"
-        )
-
         # current loaded posts
         for post in self._posts:
+            logging.info(
+                "Trying to check if the post has already been discarded. "
+                f"Post url: {post['url']}"
+            )
 
             # check if the same post has already been discarded
             if self._isAlreadyDiscarded(post):
+                logging.info("It has already been discarded")
                 continue
 
             # load fingerprint
@@ -326,25 +326,37 @@ class Reddit:
                 hash=self._settings["hash_threshold"] > 0,
             )
 
-            if not fingerprint:
-                logging.error(f"Couldn't fingerprint image {post['url']}")
-                continue
-            if not fingerprint["hash"]:
-                logging.error(f"Couldn't hash image {post['url']}")
+            # check if the image has already been posted
+            if self._isAlreadyPosted(post):
+                logging.info("It has already been posted")
                 continue
 
-            # check if the image has already been posted
-            if self._isAlreadyPosted(post, fingerprint):
+            if not fingerprint:
+                logging.error("Couldn't fingerprint image")
+                continue
+            if not fingerprint["hash"]:
+                logging.error("Couldn't hash image")
                 continue
 
             # check if the image constains banned words
             if self._containsSkipWords(post, fingerprint):
+                logging.info("It contains banned words")
+                to_discard.append(post)
+                continue
+
+            # check if the image is a repost
+            if self._isARepost(post, fingerprint):
+                logging.info("It is a repost")
                 to_discard.append(post)
                 continue
 
             # we found a post!
             logging.info(f"Adding post {post['url']} to queue")
-            self._post_queue.append(post)
+            # update infos about the post
+            new_post = post.copy()
+            new_post["hash"] = fingerprint["string_hash"]
+            new_post["caption"] = fingerprint["caption"]
+            self._post_queue.append(new_post)
             # update discarded list
             self._updateDiscarded(to_discard)
 
@@ -353,15 +365,18 @@ class Reddit:
         # nothing found, return false
         return False
 
-    def _updatePosted(self):
+    def _updatePosted(self, posted):
         """Updates the file of already posted urls"""
+        if not posted:
+            return
+
         try:
             with open(self._settings["posted_file"], "r") as json_file:
                 posted_data = ujson.load(json_file)
         except FileNotFoundError:
             posted_data = []
 
-        posted_data.append(self._post_queue[0])
+        posted_data.append(posted)
 
         with open(self._settings["posted_file"], "w") as json_file:
             ujson.dump(posted_data, json_file, indent=2)
@@ -563,7 +578,7 @@ class Reddit:
         if not self._post_queue:
             return None
 
-        self._updatePosted()
+        self._updatePosted(self._post_queue[0])
         return self._post_queue.pop(0)["url"]
 
     @property
