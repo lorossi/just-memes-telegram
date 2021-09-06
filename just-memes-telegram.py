@@ -99,6 +99,10 @@ class Telegram:
         while next_post - preload_time <= now:
             next_post += minutes_between_messages
 
+        next_post_no_preload = midnight
+        while next_post_no_preload - preload_time <= now:
+            next_post_no_preload += minutes_between_messages
+
         # To avoid rounding errors we recalculate the current time
         now = datetime.now()
         seconds_until_next_post = (next_post - now).seconds
@@ -108,7 +112,8 @@ class Telegram:
             "seconds_between_posts": 60 * self._minutes_between_messages,
             "seconds_until_first_post": seconds_until_next_post,
             "seconds_until_first_preload": seconds_until_next_preload,
-            "next_post_timestamp": next_post.isoformat()
+            "next_post_timestamp": next_post.isoformat(),
+            "next_post_timestamp_no_preload": next_post_no_preload.isoformat(),
         }
 
     def _setMemesRoutineInterval(self):
@@ -388,12 +393,10 @@ class Telegram:
 
         if chat_id in self._admins:
             timing = self._calculateTiming()
-            if timing["next_post_timestamp"]:
+            if timing["next_post_timestamp_no_preload"]:
                 message = (
-                    "_The next meme is scheduled for:_\n"
-                    f"{timing['next_post_timestamp']}\n"
-                    f"_That is_ {timing['seconds_until_first_post']} "
-                    "_seconds from now._\n"
+                    "_The next meme is scheduled at:_ "
+                    f"{timing['next_post_timestamp']}"
                 )
             else:
                 message = (
