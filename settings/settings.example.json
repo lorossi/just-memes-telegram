@@ -19,6 +19,7 @@
     "posts_per_day": 92,
     "start_delay": 0,
     "max_retries": 5,
+    "preload_time": 1,
     "admins": []
   }
 }

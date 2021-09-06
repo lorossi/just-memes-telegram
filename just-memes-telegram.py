@@ -32,11 +32,12 @@ class Telegram:
     '''
 
     def __init__(self):
-        self._version = "1.8.1.4b"  # current bot version
+        self._version = "1.8.1.5b"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._r = None
         self._send_memes_job = None
+        self._preload_memes_job = None
 
         self._loadSettings()
 
@@ -67,55 +68,77 @@ class Telegram:
     def _calculateTiming(self):
         """ Calculates seconds between posts and until next post"""
 
+        # calculation of time between messages
         self._minutes_between_messages = int(
             24 * 60 / self._posts_per_day
         )
-
+        # convert start delay into timedelta
         delay_minutes = timedelta(
             minutes=self._start_delay
         )
-
-        midnight = datetime.now().replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) + delay_minutes
-
-        now = datetime.now().replace(second=0, microsecond=0)
-
-        # Time between memes has been already calculated in loadSettings
+        # convert preload time into timedelta
+        preload_time = timedelta(
+            minutes=self._preload_time
+        )
+        # convert minutes_between_messages time into timedelta
+        # minutes_between_messages was calculated before
         minutes_between_messages = timedelta(
             minutes=self._minutes_between_messages
         )
 
+        # starting time
+        midnight = datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) + delay_minutes
+        # remove seconds and microseconds from now
+        now = datetime.now().replace(second=0, microsecond=0)
+
         # Initialize the loop to add an interval until we are in the future
         next_post = midnight
-        while (next_post <= now):
+        while next_post - preload_time <= now:
             next_post += minutes_between_messages
 
         # To avoid rounding errors we recalculate the current time
         now = datetime.now()
         seconds_until_next_post = (next_post - now).seconds
+        seconds_until_next_preload = (next_post - now - preload_time).seconds
 
         return {
-            "seconds_between": 60 * self._minutes_between_messages,
-            "seconds_until": seconds_until_next_post,
-            "timestamp": next_post.isoformat()
+            "seconds_between_posts": 60 * self._minutes_between_messages,
+            "seconds_until_first_post": seconds_until_next_post,
+            "seconds_until_first_preload": seconds_until_next_preload,
+            "next_post_timestamp": next_post.isoformat()
         }
 
     def _setMemesRoutineInterval(self):
         timing = self._calculateTiming()
-
         # we remove already started jobs from the schedule
-        # (this happens when we change the number of posts per day)
+        # (this happens when we change the number of posts per day or
+        # the preload time)
 
-        if (self._send_memes_job):
+        # first take care of send memes job
+        # remove the old job, if already set
+        if self._send_memes_job:
             self._send_memes_job.schedule_removal()
 
         # set new routine
         self._send_memes_job = self._jobqueue.run_repeating(
             self._botSendmemeRoutine,
-            interval=timing["seconds_between"],
-            first=timing["seconds_until"],
+            interval=timing["seconds_between_posts"],
+            first=timing["seconds_until_first_post"],
             name="send_memes"
+        )
+
+        # then take care of preload memes job
+        # remove the old job, if already set
+        if self._preload_memes_job:
+            self._preload_memes_job.schedule_removal()
+        # set new routine
+        self._preload_memes_job = self._jobqueue.run_repeating(
+            self._botPreloadmemeRoutine,
+            interval=timing["seconds_between_posts"],
+            first=timing["seconds_until_first_preload"],
+            name="preload_memes"
         )
 
     # Bot routines
@@ -170,24 +193,27 @@ class Telegram:
 
         logging.info("New day routine ended")
 
-    def _botSendmemeRoutine(self, context: CallbackContext):
-        logging.info("Sending memes routine begins")
-
+    def _botPreloadmemeRoutine(self, _: CallbackContext):
+        logging.info("Preload memes routine begins")
         # load url from reddit
-        new_url = self._reddit.new_url
 
-        if not new_url:
+        if not self._reddit.meme_loaded:
             # no urls on reddit, fetching a new one
             self._reddit.fetch()
-            logging.info("Posts found")
             # adds the photo to bot queue so we can use this later
-            new_url = self._reddit.new_url
+            logging.info("Posts found")
         else:
             logging.info("Loading meme from queue")
+
+        logging.info("Preload memes routine ended")
+
+    def _botSendmemeRoutine(self, context: CallbackContext):
+        logging.info("Sending memes routine begins")
 
         # it's time to post a meme
         channel_name = self._settings["channel_name"]
         caption = self._settings["caption"]
+        new_url = self._reddit.meme_url
         logging.info(f"Sending image with url {new_url}")
 
         count = 0
@@ -359,11 +385,11 @@ class Telegram:
 
         if chat_id in self._admins:
             timing = self._calculateTiming()
-            if timing["timestamp"]:
+            if timing["next_post_timestamp"]:
                 message = (
                     "_The next meme is scheduled for:_\n"
-                    f"{timing['timestamp']}\n"
-                    f"_That is_ {timing['seconds_until']} "
+                    f"{timing['next_post_timestamp']}\n"
+                    f"_That is_ {timing['seconds_until_first_post']} "
                     "_seconds from now._\n"
                 )
             else:
@@ -826,6 +852,15 @@ class Telegram:
     @ _start_delay.setter
     def _start_delay(self, value):
         self._settings["start_delay"] = value
+        self._saveSettings()
+
+    @ property
+    def _preload_time(self):
+        return self._settings["preload_time"]
+
+    @ _preload_time.setter
+    def _preload_time(self, value):
+        self._settings["preload_time"] = value
         self._saveSettings()
 
     @ property

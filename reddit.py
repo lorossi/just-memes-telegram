@@ -97,12 +97,22 @@ class Reddit:
             hash = imagehash.average_hash(im) if hash else None
             # OCR it
             if ocr:
+                # remove spaces and lower
                 raw_caption = pytesseract.image_to_string(im)
                 raw_caption = raw_caption.lower().strip()
 
                 if raw_caption == "":
+                    # if there's no caption, save an empty string
                     caption = ""
                 else:
+                    # otherwise, remove all tabs and newlines
+                    for remove in ["\n", "\t"]:
+                        raw_caption = raw_caption.replace(remove, "")
+                    # remove multiple spaces as well
+                    while "  " in raw_caption:
+                        raw_caption = raw_caption.replace("  ", " ")
+
+                    # then remove all non printable characters
                     printable = set(string.printable)
                     caption = "".join(
                         filter(lambda x: x in printable, raw_caption)
@@ -201,6 +211,29 @@ class Reddit:
             if post["url"] == discarded["url"]:
                 return True
 
+    def _isARepost(self, fingerprint):
+        # sourcery skip: merge-nested-ifs
+        for posted in self._posted:
+            # check caption
+            if fingerprint["caption"] and posted["caption"]:
+                if fingerprint["caption"] == posted["caption"]:
+                    return True
+
+            # check if hashes have been calculated for both posts
+            # and if so, compare them
+            # old hash, has to be loaded from string
+            if posted["hash"]:
+                posted_hash = imagehash.hex_to_hash(posted["hash"])
+                difference = fingerprint["hash"] - posted_hash
+
+                # if the images are too similar
+                if difference < self._settings["hash_threshold"]:
+                    logging.info(f"Hash difference: {difference}")
+                    # don't post it
+                    return True
+
+        return False
+
     def _containsSkipWords(self, post, fingerprint):
         # sourcery skip: return-identity
         """Checks if the post contains words to be skipped
@@ -239,38 +272,15 @@ class Reddit:
         Returns:
             [boolean]
         """
-
         for posted in self._posted:
             # check post reddit id
             if "id" in post and "id" in posted:
                 if post["id"] == posted["id"]:
                     return True
+
             # check post url
             if post["url"] == posted["url"]:
                 return True
-
-        return False
-
-    def _isARepost(self, fingerprint):
-        # sourcery skip: merge-nested-ifs
-        for posted in self._posted:
-            # check caption
-            if fingerprint["caption"] and posted["caption"]:
-                if fingerprint["caption"] == posted["caption"]:
-                    return True
-
-            # check if hashes have been calculated for both posts
-            # and if so, compare them
-            # old hash, has to be loaded from string
-            if posted["hash"]:
-                posted_hash = imagehash.hex_to_hash(posted["hash"])
-                difference = fingerprint["hash"] - posted_hash
-
-                # if the images are too similar
-                if difference < self._settings["hash_threshold"]:
-                    logging.info(f"Hash difference: {difference}")
-                    # don't post it
-                    return True
 
         return False
 
@@ -281,7 +291,6 @@ class Reddit:
         Returns:
             [boolean]: Have new posts been found?
         """
-
         logging.info("Finding new posts..")
 
         # load lists of files posted and discarded
@@ -575,13 +584,17 @@ class Reddit:
         self._saveSettings()
 
     @property
-    def new_url(self):
+    def meme_url(self):
         # consumes and returns new post
         if not self._post_queue:
             return None
 
         self._updatePosted(self._post_queue[0])
         return self._post_queue.pop(0)["url"]
+
+    @property
+    def meme_loaded(self):
+        return len(self._post_queue) > 0
 
     @property
     def queue(self):
