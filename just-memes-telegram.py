@@ -33,7 +33,7 @@ class Telegram:
     '''
 
     def __init__(self):
-        self._version = "1.8.1.6b"  # current bot version
+        self._version = "1.8.1.7b"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._r = None
@@ -103,7 +103,8 @@ class Telegram:
 
         # To avoid rounding errors we recalculate the current time
         now = datetime.now()
-        seconds_until_next_post = (next_post - now).seconds
+        # we add 30 seconds to actual time in order to make it closer to the real deal
+        seconds_until_next_post = (next_post - now).seconds + 30
         seconds_until_next_preload = (next_post - now - preload_time).seconds
 
         return {
