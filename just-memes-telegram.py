@@ -11,8 +11,8 @@ from reddit import Reddit
 
 
 class Telegram:
-    # Class that handles all the Telegram stuff
-    '''
+    """ Class that handles all the Telegram stuff
+
     BOTFATHER commands description
     start - view start message
     reset - reloads the bot
@@ -30,10 +30,10 @@ class Telegram:
     cleanpostedlist - cleans list of posted memes
     status - show some infos about the bot
     version - show bot version
-    '''
+    """
 
     def __init__(self):
-        self._version = "1.8.1.7b"  # current bot version
+        self._version = "1.8.2b"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._r = None
@@ -45,10 +45,12 @@ class Telegram:
     # Private methods
 
     def _loadSettings(self):
+        """ Loads settings from file """
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Telegram"]
 
     def _saveSettings(self):
+        """ Saves settings to file """
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
@@ -59,6 +61,7 @@ class Telegram:
             ujson.dump(old_settings, outfile, indent=2)
 
     def _escapeMarkdown(self, str):
+        """ Replaces markdown delimites with escaped ones """
         to_replace = ["_", "*", "[", "`"]
         for replace in to_replace:
             str = str.replace(replace, f"\\{replace}")
@@ -117,6 +120,7 @@ class Telegram:
         }
 
     def _setMemesRoutineInterval(self):
+        """ Create routine to send memes """
         timing = self._calculateTiming()
         # we remove already started jobs from the schedule
         # (this happens when we change the number of posts per day or
@@ -150,6 +154,7 @@ class Telegram:
     # Bot routines
 
     def _botStartupRoutine(self, context: CallbackContext):
+        """ Sends a message to admins when the bot is started """
         self._setMemesRoutineInterval()
 
         message = "*Bot started!*"
@@ -163,6 +168,7 @@ class Telegram:
         logging.info("Startup routine completed")
 
     def _botClearRoutine(self, context: CallbackContext):
+        """ Routines that handles the removal of old posts """
         # sourcery skip: class-extract-method
         message = "*Clear day routine!*"
         for chat_id in self._admins:
@@ -202,6 +208,7 @@ class Telegram:
         logging.info("New day routine ended")
 
     def _botPreloadmemeRoutine(self, _: CallbackContext):
+        """ Routine that preloads memes and puts them into queue """
         logging.info("Preload memes routine begins")
         # load url from reddit
 
@@ -216,6 +223,7 @@ class Telegram:
         logging.info("Preload memes routine ended")
 
     def _botSendmemeRoutine(self, context: CallbackContext):
+        """ Routine that send memes when it's time to do so """
         logging.info("Sending memes routine begins")
 
         # it's time to post a meme
@@ -253,6 +261,8 @@ class Telegram:
         logging.info("Sending memes routine completed")
 
     def _botError(self, update, context):
+        """ Function that sends a message to admins whenever
+        an error is raised """
         message = "*ERROR RAISED*"
         # admin message
         for chat_id in self._admins:
@@ -283,6 +293,7 @@ class Telegram:
 
     # Bot commands
     def _botStartCommand(self, update, context):
+        """ Function handling start command """
         chat_id = update.effective_chat.id
 
         message = (
@@ -297,6 +308,7 @@ class Telegram:
         )
 
     def _botResetCommand(self, update, context):
+        """ Function handling reset command """
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
@@ -319,6 +331,7 @@ class Telegram:
             )
 
     def _botStopCommand(self, update, context):
+        """ Function handling stop command """
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
@@ -340,6 +353,7 @@ class Telegram:
             )
 
     def _botStatusCommand(self, update, context):
+        """ Function handling status command """
         # sourcery skip: extract-method
         chat_id = update.effective_chat.id
 
@@ -388,6 +402,7 @@ class Telegram:
         )
 
     def _botNextpostCommand(self, update, context):
+        """ Function handling nextpost command """
         logging.info("Called next post command")
         chat_id = update.effective_chat.id
 
@@ -413,6 +428,7 @@ class Telegram:
         )
 
     def _botQueueCommand(self, update, context):
+        """ Function handling queue command """
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
@@ -453,6 +469,7 @@ class Telegram:
         )
 
     def _botSubredditsCommand(self, update, context):
+        """ Function handling subreddits command """
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
@@ -484,6 +501,7 @@ class Telegram:
         )
 
     def _botPostsperdayCommand(self, update, context):
+        """ Function handling postsperday command """
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
@@ -517,6 +535,7 @@ class Telegram:
         )
 
     def _botPreloadtimeCommand(self, update, context):
+        """ Function handling preloadtime command """
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
@@ -552,6 +571,7 @@ class Telegram:
         )
 
     def _botWordstoskipCommand(self, update, context):
+        """ Function handling wordstoskip command """
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
@@ -588,6 +608,7 @@ class Telegram:
         )
 
     def _botToggleocrCommand(self, update, context):
+        """ Function handling toggleocr command """
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             self._reddit.ocr = not self._reddit.oc
@@ -605,6 +626,7 @@ class Telegram:
         )
 
     def _botImageThresholdCommand(self, update, context):
+        """ Function handling threshold command """
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
@@ -640,6 +662,7 @@ class Telegram:
         )
 
     def _botStartdelayCommand(self, update, context):
+        """ Function handling startdelay command """
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
@@ -677,6 +700,7 @@ class Telegram:
         )
 
     def _botCleanqueueCommand(self, update, context):
+        """ Function handling cleanqueue command """
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             self._reddit.cleanQueue()
@@ -691,6 +715,7 @@ class Telegram:
         )
 
     def _botCleanpostedlistCommand(self, update, context):
+        """ Function handling cleanpostedlist command """
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             removed = self._reddit.cleanPosted()
@@ -711,6 +736,7 @@ class Telegram:
         )
 
     def _botPingCommand(self, update, context):
+        """ Function handling ping command """
         chat_id = update.effective_chat.id
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
         message = "🏓 *PONG* 🏓"
@@ -721,6 +747,7 @@ class Telegram:
         )
 
     def _botVersionCommand(self, update, context):
+        """ Function handling version command """
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             escaped_version = self._escapeMarkdown(self._version)
@@ -738,6 +765,8 @@ class Telegram:
         )
 
     def start(self):
+        """ Function that starts the bot in all its components """
+
         # create reddit object
         self._reddit = Reddit()
 
@@ -883,38 +912,41 @@ class Telegram:
 
     @ property
     def _posts_per_day(self):
+        """ Getter for the number of posts per day """
         return self._settings["posts_per_day"]
 
     @ _posts_per_day.setter
     def _posts_per_day(self, value):
+        """ Setter for the number of posts per day """
         self._settings["posts_per_day"] = value
         self._saveSettings()
 
     @ property
     def _start_delay(self):
+        """ Getter for the start delay """
         return self._settings["start_delay"]
 
     @ _start_delay.setter
     def _start_delay(self, value):
+        """ Setter for the start delay """
         self._settings["start_delay"] = value
         self._saveSettings()
 
     @ property
     def _preload_time(self):
+        """ Getter for the preload time """
         return self._settings["preload_time"]
 
     @ _preload_time.setter
     def _preload_time(self, value):
+        """ Setter for the preload time """
         self._settings["preload_time"] = value
         self._saveSettings()
 
     @ property
     def _admins(self):
+        """ Getter for the admins list """
         return self._settings["admins"]
-
-    @ property
-    def _channel_name(self):
-        return self._settings["channel_name"]
 
 
 def main():
