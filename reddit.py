@@ -14,9 +14,9 @@ from datetime import datetime
 class Reddit:
     """
      This class handles all the connections to Reddit, including:
-    ---Post Fetching
-    ---Image OCR to prevent Reddit-only memes to be posted on Telegram
-    ---Image Hashing to prevent reposts to be posted on Telegram
+        -Post Fetching
+        -Image OCR to prevent Reddit-only memes to be posted on Telegram
+        -Image Hashing to prevent reposts to be posted on Telegram
     """
 
     def __init__(self):
@@ -212,6 +212,14 @@ class Reddit:
                 return True
 
     def _isARepost(self, fingerprint):
+        """Checks if the image has already been posted, thanks to its fingerprint
+
+        Args:
+            fingerprint [dict]: Fingerprint created from _imageFingerprint
+
+        Returns:
+            [boolen]
+        """
         # sourcery skip: merge-nested-ifs
         for posted in self._posted:
             # check caption
