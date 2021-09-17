@@ -64,7 +64,7 @@ class Telegram:
         to_replace = ["_", "*", "[", "`"]
         for replace in to_replace:
             str = str.replace(replace, f"\\{replace}")
-        return to_replace
+        return str
 
     def _calculateTiming(self):
         """ Calculates seconds between posts and until next post"""
