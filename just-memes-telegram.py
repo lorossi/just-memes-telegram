@@ -11,8 +11,8 @@ from reddit import Reddit
 
 
 class Telegram:
-    # Class that handles all the Telegram stuff
-    '''
+    """ Class that handles all the Telegram stuff
+
     BOTFATHER commands description
     start - view start message
     reset - reloads the bot
@@ -28,8 +28,8 @@ class Telegram:
     startdelay - set delay (minutes after midnight) to start posting
     cleanqueue - cleans queue
     status - show some infos about the bot
-    channelname - show the destination channel name
-    '''
+    version - show bot version
+    """
 
     def __init__(self):
         self._version = "1.8.2"  # current bot version
@@ -64,7 +64,7 @@ class Telegram:
         to_replace = ["_", "*", "[", "`"]
         for replace in to_replace:
             str = str.replace(replace, f"\\{replace}")
-        return str
+        return to_replace
 
     def _calculateTiming(self):
         """ Calculates seconds between posts and until next post"""
@@ -401,17 +401,16 @@ class Telegram:
         )
 
     def _botNextpostCommand(self, update, context):
+        """ Function handling nextpost command """
         logging.info("Called next post command")
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
             timing = self._calculateTiming()
-            if timing["timestamp"]:
+            if timing["next_post_timestamp_no_preload"]:
                 message = (
-                    "_The next meme is scheduled for:_\n"
-                    f"{timing['timestamp']}\n"
-                    f"_That is_ {timing['seconds_until']} "
-                    "_seconds from now._\n"
+                    "_The next meme is scheduled at:_ "
+                    f"{timing['next_post_timestamp_no_preload']}"
                 )
             else:
                 message = (
@@ -743,23 +742,6 @@ class Telegram:
             parse_mode=ParseMode.MARKDOWN
         )
 
-    def _botChannelnameCommand(self, update, context):
-        chat_id = update.effective_chat.id
-        if chat_id in self._admins:
-            escaped_name = self._escapeMarkdown(self._channel_name)
-            message = (
-                "_Channel name:_ "
-                f"{escaped_name}"
-            )
-        else:
-            message = "*This command is for admins only*"
-
-        context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
-        )
-
     def start(self):
         """ Function that starts the bot in all its components """
 
@@ -887,16 +869,11 @@ class Telegram:
             )
         )
 
-        # hidden command, not in list
         self._dispatcher.add_handler(
             CommandHandler(
                 "version",
                 self._botVersionCommand
             )
-        )
-
-        self._dispatcher.add_handler(
-            CommandHandler("channelname", self._botChannelnameCommand)
         )
 
         # this handler will notify the admins and the user if something went
@@ -944,10 +921,6 @@ class Telegram:
     def _admins(self):
         """ Getter for the admins list """
         return self._settings["admins"]
-
-    @ property
-    def _channel_name(self):
-        return self._settings["channel_name"]
 
 
 def main():
