@@ -27,7 +27,6 @@ class Telegram:
     imagethreshold - set image threshold (0 completely disables image hashing)
     startdelay - set delay (minutes after midnight) to start posting
     cleanqueue - cleans queue
-    cleanpostedlist - cleans list of posted memes
     status - show some infos about the bot
     version - show bot version
     """
@@ -714,27 +713,6 @@ class Telegram:
             parse_mode=ParseMode.MARKDOWN
         )
 
-    def _botCleanpostedlistCommand(self, update, context):
-        """ Function handling cleanpostedlist command """
-        chat_id = update.effective_chat.id
-        if chat_id in self._admins:
-            removed = self._reddit.cleanPosted()
-            discarded = self._reddit.cleanDiscarded()
-
-            message = (
-                f"{removed} old posts were removed!\n"
-                f"{discarded} discarded posts were removed!"
-            )
-
-        else:
-            message = "*This command is for admins only*"
-
-        context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
-        )
-
     def _botPingCommand(self, update, context):
         """ Function handling ping command """
         chat_id = update.effective_chat.id
@@ -883,13 +861,6 @@ class Telegram:
             )
         )
 
-        self._dispatcher.add_handler(
-            CommandHandler(
-                "cleanpostedlist",
-                self._botCleanpostedlistCommand
-            )
-        )
-
         # hidden command, not in list
         self._dispatcher.add_handler(
             CommandHandler(
@@ -899,7 +870,10 @@ class Telegram:
         )
 
         self._dispatcher.add_handler(
-            CommandHandler("version", self._botVersionCommand)
+            CommandHandler(
+                "version",
+                self._botVersionCommand
+            )
         )
 
         # this handler will notify the admins and the user if something went

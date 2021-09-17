@@ -107,7 +107,7 @@ class Reddit:
                 else:
                     # otherwise, remove all tabs and newlines
                     for remove in ["\n", "\t"]:
-                        raw_caption = raw_caption.replace(remove, "")
+                        raw_caption = raw_caption.replace(remove, " ")
                     # remove multiple spaces as well
                     while "  " in raw_caption:
                         raw_caption = raw_caption.replace("  ", " ")
