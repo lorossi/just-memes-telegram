@@ -1,25 +1,29 @@
 {
   "Reddit": {
-    "id": "",
-    "token": "",
-    "request_limit": 5,
-    "subreddits": [],
-    "posted_file": "settings/posted.json",
-    "discarded_file": "settings/discarded.json",
-    "max_days": 28,
-    "tesseract_path": "",
-    "words_to_skip": [],
-    "hash_threshold": 20,
-    "ocr": true
+    "id": "REDDIT-ID",
+    "token": "REDDIT-TOKEN",
+    "request_limit": 100,
+    "subreddits": ["SUBREDDITS", "LIST"]
+  },
+  "Fingerprinter": {
+    "tesseract_path": "TESSERACT_PATH"
+  },
+  "Database": {
+    "mongodb_url": "URL-TO-MONGODB-SERVER",
+    "database_name": "MONGODB-DATBASE-NAME",
+    "max_days": 28
   },
   "Telegram": {
-    "token": "",
-    "channel_name": "",
-    "caption": "",
-    "posts_per_day": 92,
+    "token": "TELEGRAM-TOKEN",
+    "channel_name": "TELEGRAM-CHANNEL-NAME",
+    "caption": "POSTS-CAPTION",
+    "words_to_skip": ["WORDS", "TO", "SKIP"],
+    "ocr": true,
+    "posts_per_day": 720,
+    "hash_threshold": 10,
     "start_delay": 0,
     "max_retries": 5,
     "preload_time": 1,
-    "admins": []
+    "admins": ["LIST", "OF", "ADMINS", "CHAT", "ID"]
   }
 }
