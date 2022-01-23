@@ -187,12 +187,13 @@ class Telegram:
         # load url from reddit
 
         if not self._queue:
-            # no urls on reddit, fetching a new one
+            # no urls on queue, fetching a new one
 
+            # load old ids, hashes and urls
             old_ids = self._database.getOldIds()
             old_hashes = self._database.getOldHashes()
             old_urls = self._database.getOldUrls()
-
+            # filter images that match old ids or old urls
             to_check = [
                 p
                 for p in self._reddit.fetch()
@@ -202,9 +203,19 @@ class Telegram:
             logging.info(f"Looking for a post between {len(to_check)} posts preloaded")
 
             for post in to_check:
+                # check if title contains anything not permitted
+                if any(s in post.title for s in self._settings["words_to_skip"]):
+                    logging.info("Skipping. Title contains skippable words.")
+                    # update database
+                    self._database.addPostToDatabase(post=post)
+                    continue
+
+                # fingerprint the post
                 fingerprint = self._fingerprinter.fingerprint(post.url)
+                # update the database with post and fingerprint
                 self._database.addPostToDatabase(post=post, fingerprint=fingerprint)
 
+                # check if the new post is too similar to an older one
                 if any(
                     abs(fingerprint.hash - f) < self._settings["hash_threshold"]
                     for f in old_hashes
@@ -212,6 +223,7 @@ class Telegram:
                     logging.info("Skipping. Too similar to past image.")
                     continue
 
+                # check if caption contains anything not permitted
                 if self._settings["ocr"] and fingerprint.caption:
                     if any(
                         s in fingerprint.caption

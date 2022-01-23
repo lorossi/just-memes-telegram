@@ -25,6 +25,22 @@ class Database:
         self._client = pymongo.MongoClient(self._settings["mongodb_url"])
         self._db = self._client[self._settings["database_name"]]
 
+    def _savePostData(self, post: Post):
+        """Adds Post data to database
+
+        Args:
+            post (Post): Post object
+        """
+        self._db["posts"].insert_one(post.serialize())
+
+    def _saveFingerprintData(self, fingerprint: Fingerprint):
+        """Adds Fingerprint data to database
+
+        Args:
+            fingerprint (Fingerprint): Fingerprint object
+        """
+        self._db["fingerprints"].insert_one(fingerprint.serialize())
+
     def getOldIds(self) -> set[str]:
         """Loads old ids from database, either because their relative post was discarded or posted
 
@@ -72,25 +88,9 @@ class Database:
             fingerprint (Fingerprint, optional): [description]. Fingerprint object
         """
         if post:
-            self.savePostData(post)
+            self._savePostData(post)
         if fingerprint:
-            self.saveFingerprintData(fingerprint)
-
-    def savePostData(self, post: Post):
-        """Adds Post data to database
-
-        Args:
-            post (Post): Post object
-        """
-        self._db["posts"].insert_one(post.serialize())
-
-    def saveFingerprintData(self, fingerprint: Fingerprint):
-        """Adds Fingerprint data to database
-
-        Args:
-            fingerprint (Fingerprint): Fingerprint object
-        """
-        self._db["fingerprints"].insert_one(fingerprint.serialize())
+            self._saveFingerprintData(fingerprint)
 
     def clean(self) -> tuple[int, int]:
         """Remove old instances of documents from database
