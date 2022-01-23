@@ -9,9 +9,15 @@ from telegram.ext import Updater, CommandHandler, CallbackContext
 
 from reddit import Reddit
 
+"""
+TODO
+    - remove some commands
+    - use a decent database
+"""
+
 
 class Telegram:
-    """ Class that handles all the Telegram stuff
+    """Class that handles all the Telegram stuff
 
     BOTFATHER commands description
     start - view start message
@@ -44,12 +50,12 @@ class Telegram:
     # Private methods
 
     def _loadSettings(self):
-        """ Loads settings from file """
+        """Loads settings from file"""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Telegram"]
 
     def _saveSettings(self):
-        """ Saves settings to file """
+        """Saves settings to file"""
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
@@ -60,37 +66,30 @@ class Telegram:
             ujson.dump(old_settings, outfile, indent=2)
 
     def _escapeMarkdown(self, str):
-        """ Replaces markdown delimites with escaped ones """
+        """Replaces markdown delimites with escaped ones"""
         to_replace = ["_", "*", "[", "`"]
         for replace in to_replace:
             str = str.replace(replace, f"\\{replace}")
         return str
 
     def _calculateTiming(self):
-        """ Calculates seconds between posts and until next post"""
+        """Calculates seconds between posts and until next post"""
 
         # calculation of time between messages
-        self._minutes_between_messages = int(
-            24 * 60 / self._posts_per_day
-        )
+        self._minutes_between_messages = int(24 * 60 / self._posts_per_day)
         # convert start delay into timedelta
-        delay_minutes = timedelta(
-            minutes=self._start_delay
-        )
+        delay_minutes = timedelta(minutes=self._start_delay)
         # convert preload time into timedelta
-        preload_time = timedelta(
-            minutes=self._preload_time
-        )
+        preload_time = timedelta(minutes=self._preload_time)
         # convert minutes_between_messages time into timedelta
         # minutes_between_messages was calculated before
-        minutes_between_messages = timedelta(
-            minutes=self._minutes_between_messages
-        )
+        minutes_between_messages = timedelta(minutes=self._minutes_between_messages)
 
         # starting time
-        midnight = datetime.now().replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) + delay_minutes
+        midnight = (
+            datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            + delay_minutes
+        )
         # remove seconds and microseconds from now
         now = datetime.now().replace(second=0, microsecond=0)
 
@@ -119,7 +118,7 @@ class Telegram:
         }
 
     def _setMemesRoutineInterval(self):
-        """ Create routine to send memes """
+        """Create routine to send memes"""
         timing = self._calculateTiming()
         # we remove already started jobs from the schedule
         # (this happens when we change the number of posts per day or
@@ -135,7 +134,7 @@ class Telegram:
             self._botSendmemeRoutine,
             interval=timing["seconds_between_posts"],
             first=timing["seconds_until_first_post"],
-            name="send_memes"
+            name="send_memes",
         )
 
         # then take care of preload memes job
@@ -147,27 +146,25 @@ class Telegram:
             self._botPreloadmemeRoutine,
             interval=timing["seconds_between_posts"],
             first=timing["seconds_until_first_preload"],
-            name="preload_memes"
+            name="preload_memes",
         )
 
     # Bot routines
 
     def _botStartupRoutine(self, context: CallbackContext):
-        """ Sends a message to admins when the bot is started """
+        """Sends a message to admins when the bot is started"""
         self._setMemesRoutineInterval()
 
         message = "*Bot started!*"
         for chat_id in self._admins:
             context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
             )
 
         logging.info("Startup routine completed")
 
     def _botClearRoutine(self, context: CallbackContext):
-        """ Routines that handles the removal of old posts """
+        """Routines that handles the removal of old posts"""
         # sourcery skip: class-extract-method
         message = "*Clear day routine!*"
         for chat_id in self._admins:
@@ -175,7 +172,7 @@ class Telegram:
                 chat_id=chat_id,
                 text=message,
                 parse_mode=ParseMode.MARKDOWN,
-                disable_notification=True
+                disable_notification=True,
             )
 
         removed = self._reddit.cleanPosted()
@@ -201,13 +198,13 @@ class Telegram:
                 chat_id=chat_id,
                 text=message,
                 parse_mode=ParseMode.MARKDOWN,
-                disable_notification=True
+                disable_notification=True,
             )
 
         logging.info("New day routine ended")
 
     def _botPreloadmemeRoutine(self, _: CallbackContext):
-        """ Routine that preloads memes and puts them into queue """
+        """Routine that preloads memes and puts them into queue"""
         logging.info("Preload memes routine begins")
         # load url from reddit
 
@@ -222,7 +219,7 @@ class Telegram:
         logging.info("Preload memes routine ended")
 
     def _botSendmemeRoutine(self, context: CallbackContext):
-        """ Routine that send memes when it's time to do so """
+        """Routine that send memes when it's time to do so"""
         logging.info("Sending memes routine begins")
 
         # it's time to post a meme
@@ -236,9 +233,7 @@ class Telegram:
         while True:
             try:
                 context.bot.send_photo(
-                    chat_id=channel_name,
-                    photo=new_url,
-                    caption=caption
+                    chat_id=channel_name, photo=new_url, caption=caption
                 )
                 logging.info("Image sent")
                 break
@@ -246,9 +241,7 @@ class Telegram:
             except Exception as e:
                 count += 1
                 logging.error(
-                    "Cannot send photo. "
-                    f"Error {e}. "
-                    f"Try {count} of {max_retries}"
+                    "Cannot send photo. " f"Error {e}. " f"Try {count} of {max_retries}"
                 )
 
                 if count == max_retries:
@@ -260,15 +253,13 @@ class Telegram:
         logging.info("Sending memes routine completed")
 
     def _botError(self, update, context):
-        """ Function that sends a message to admins whenever
-        an error is raised """
+        """Function that sends a message to admins whenever
+        an error is raised"""
         message = "*ERROR RAISED*"
         # admin message
         for chat_id in self._admins:
             context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
             )
 
         error_string = str(context.error)
@@ -282,9 +273,7 @@ class Telegram:
 
         for chat_id in self._admins:
             context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                disable_web_page_preview=True
+                chat_id=chat_id, text=message, disable_web_page_preview=True
             )
 
         # logs to file
@@ -292,7 +281,7 @@ class Telegram:
 
     # Bot commands
     def _botStartCommand(self, update, context):
-        """ Function handling start command """
+        """Function handling start command"""
         chat_id = update.effective_chat.id
 
         message = (
@@ -301,44 +290,36 @@ class Telegram:
             f"_Join us at_ {self._settings['channel_name']}"
         )
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botResetCommand(self, update, context):
-        """ Function handling reset command """
+        """Function handling reset command"""
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
             message = "_Resetting..._"
 
             context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
             )
 
             logging.warning("Resetting")
-            os.execl(sys.executable, sys.executable, * sys.argv)
+            os.execl(sys.executable, sys.executable, *sys.argv)
         else:
             message = "*This command is for admins only*"
             context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
             )
 
     def _botStopCommand(self, update, context):
-        """ Function handling stop command """
+        """Function handling stop command"""
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
             message = "_Bot stopped_"
             context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
             )
             self._updater.stop()
             logging.warning("Bot stopped")
@@ -346,13 +327,11 @@ class Telegram:
         else:
             message = "*This command is for admins only*"
             context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
             )
 
     def _botStatusCommand(self, update, context):
-        """ Function handling status command """
+        """Function handling status command"""
         # sourcery skip: extract-method
         chat_id = update.effective_chat.id
 
@@ -365,43 +344,29 @@ class Telegram:
             # then, post telegram status
             message += "\n\n*Telegram status*\n"
             message += self._escapeMarkdown(
-                ujson.dumps(
-                    self._settings,
-                    indent=4,
-                    sort_keys=True
-                )
+                ujson.dumps(self._settings, indent=4, sort_keys=True)
             )
 
             # then, next post status
             message += "\n\n*Next post status*\n"
             message += self._escapeMarkdown(
-                ujson.dumps(
-                    self._calculateTiming(),
-                    indent=4,
-                    sort_keys=True
-                )
+                ujson.dumps(self._calculateTiming(), indent=4, sort_keys=True)
             )
 
             # then, post reddit status
             message += "\n\n*Reddit status*\n"
             message += self._escapeMarkdown(
-                ujson.dumps(
-                    self._reddit.settings,
-                    indent=4,
-                    sort_keys=True
-                )
+                ujson.dumps(self._reddit.settings, indent=4, sort_keys=True)
             )
         else:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botNextpostCommand(self, update, context):
-        """ Function handling nextpost command """
+        """Function handling nextpost command"""
         logging.info("Called next post command")
         chat_id = update.effective_chat.id
 
@@ -421,29 +386,20 @@ class Telegram:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botQueueCommand(self, update, context):
-        """ Function handling queue command """
+        """Function handling queue command"""
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
             # check if any arg has been passed
             if len(context.args) == 0:
                 if len(self._reddit.queue) > 0:
-                    queue = ujson.dumps(
-                        self._reddit.queue,
-                        indent=2,
-                        sort_keys=True
-                    )
+                    queue = ujson.dumps(self._reddit.queue, indent=2, sort_keys=True)
 
-                    message = (
-                        f"_Current message queue:_\n"
-                        f"{queue}"
-                    )
+                    message = f"_Current message queue:_\n" f"{queue}"
                 else:
                     message = (
                         "*The queue is empty*\n"
@@ -464,17 +420,17 @@ class Telegram:
             chat_id=chat_id,
             text=message,
             parse_mode=ParseMode.MARKDOWN,
-            disable_web_page_preview=True
+            disable_web_page_preview=True,
         )
 
     def _botSubredditsCommand(self, update, context):
-        """ Function handling subreddits command """
+        """Function handling subreddits command"""
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
             if len(context.args) == 0:
                 subreddits = self._reddit.subreddits
-                subreddits_list = '\n'.join(subreddits).replace('_', '\\_')
+                subreddits_list = "\n".join(subreddits).replace("_", "\\_")
                 message = (
                     "_Current subreddits:_\n"
                     f"{subreddits_list}"
@@ -483,24 +439,19 @@ class Telegram:
 
             else:
                 self._reddit.subreddits = context.args
-                subreddits_list = '\n'.join(context.args).replace('_', '\\_')
+                subreddits_list = "\n".join(context.args).replace("_", "\\_")
 
-                message = (
-                    "_New subreddit list:_\n"
-                    f"{subreddits_list}"
-                )
+                message = "_New subreddit list:_\n" f"{subreddits_list}"
 
         else:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botPostsperdayCommand(self, update, context):
-        """ Function handling postsperday command """
+        """Function handling postsperday command"""
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
@@ -515,9 +466,7 @@ class Telegram:
                 except ValueError:
                     message = "_The argument provided is not a number_"
                     context.bot.send_message(
-                        chat_id=chat_id,
-                        text=message,
-                        parse_mode=ParseMode.MARKDOWN
+                        chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
                     )
                     return
 
@@ -528,13 +477,11 @@ class Telegram:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botPreloadtimeCommand(self, update, context):
-        """ Function handling preloadtime command """
+        """Function handling preloadtime command"""
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
@@ -549,9 +496,7 @@ class Telegram:
                 except ValueError:
                     message = "_The argument provided is not a number_"
                     context.bot.send_message(
-                        chat_id=chat_id,
-                        text=message,
-                        parse_mode=ParseMode.MARKDOWN
+                        chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
                     )
                     return
 
@@ -564,13 +509,11 @@ class Telegram:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botWordstoskipCommand(self, update, context):
-        """ Function handling wordstoskip command """
+        """Function handling wordstoskip command"""
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
@@ -586,46 +529,39 @@ class Telegram:
             else:
                 # update the list of words to skip
                 self._reddit.wordstoskip = [
-                    arg.replace('\\', ' ') for arg in context.args
+                    arg.replace("\\", " ") for arg in context.args
                 ]
 
-                words_list = words_list = "\n".join(
-                    self._reddit.wordstoskip).replace("_", "\\_")
-
-                message = (
-                    "_New list of words to skip:_\n"
-                    f"{words_list}"
+                words_list = words_list = "\n".join(self._reddit.wordstoskip).replace(
+                    "_", "\\_"
                 )
+
+                message = "_New list of words to skip:_\n" f"{words_list}"
 
         else:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botToggleocrCommand(self, update, context):
-        """ Function handling toggleocr command """
+        """Function handling toggleocr command"""
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             self._reddit.ocr = not self._reddit.oc
             message = (
-                "_Ocr is now:_ "
-                f"{'Disabled' if self._reddit.ocr else 'Enabled'}"
+                "_Ocr is now:_ " f"{'Disabled' if self._reddit.ocr else 'Enabled'}"
             )
         else:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botImageThresholdCommand(self, update, context):
-        """ Function handling threshold command """
+        """Function handling threshold command"""
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
@@ -639,29 +575,22 @@ class Telegram:
                 except ValueError:
                     message = "_The argument provided is not a number_"
                     context.bot.send_message(
-                        chat_id=chat_id,
-                        text=message,
-                        parse_mode=ParseMode.MARKDOWN
+                        chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
                     )
 
                     return
 
                 self._reddit.threshold = image_threshold
-                message = (
-                    f"_Image threshold:_ "
-                    f"{self._reddit.threshold}"
-                )
+                message = f"_Image threshold:_ " f"{self._reddit.threshold}"
         else:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botStartdelayCommand(self, update, context):
-        """ Function handling startdelay command """
+        """Function handling startdelay command"""
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             if len(context.args) == 0:
@@ -676,30 +605,23 @@ class Telegram:
                 except ValueError:
                     message = "_The argument provided is not a number_"
                     context.bot.send_message(
-                        chat_id=chat_id,
-                        text=message,
-                        parse_mode=ParseMode.MARKDOWN
+                        chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
                     )
                     return
 
                 self._start_delay = start_delay
                 self._calculateTiming()
 
-                message = (
-                    "_Start delay:_ "
-                    f"{self._settings['start_delay']}"
-                )
+                message = "_Start delay:_ " f"{self._settings['start_delay']}"
         else:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botCleanqueueCommand(self, update, context):
-        """ Function handling cleanqueue command """
+        """Function handling cleanqueue command"""
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             self._reddit.cleanQueue()
@@ -708,127 +630,81 @@ class Telegram:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botPingCommand(self, update, context):
-        """ Function handling ping command """
+        """Function handling ping command"""
         chat_id = update.effective_chat.id
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
         message = "🏓 *PONG* 🏓"
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def _botVersionCommand(self, update, context):
-        """ Function handling version command """
+        """Function handling version command"""
         chat_id = update.effective_chat.id
         if chat_id in self._admins:
             escaped_version = self._escapeMarkdown(self._version)
-            message = (
-                "_Version:_ "
-                f"{escaped_version}"
-            )
+            message = "_Version:_ " f"{escaped_version}"
         else:
             message = "*This command is for admins only*"
 
         context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
     def start(self):
-        """ Function that starts the bot in all its components """
+        """Function that starts the bot in all its components"""
 
         # create reddit object
         self._reddit = Reddit()
 
         # start the bot
-        self._updater = Updater(
-            self._settings["token"],
-            use_context=True
-        )
+        self._updater = Updater(self._settings["token"], use_context=True)
         self._dispatcher = self._updater.dispatcher
         self._jobqueue = self._updater.job_queue
 
         # this routine will notify the admins
-        self._jobqueue.run_once(
-            self._botStartupRoutine,
-            when=1,
-            name="startup_routine"
-        )
+        self._jobqueue.run_once(self._botStartupRoutine, when=1, name="startup_routine")
 
         # this routine will clean the posted list
         self._jobqueue.run_daily(
-            self._botClearRoutine,
-            time(0, 15, 0, 000000),
-            name="new_day_routine"
+            self._botClearRoutine, time(0, 15, 0, 000000), name="new_day_routine"
         )
 
         # these are the handlers for all the commands
-        self._dispatcher.add_handler(
-            CommandHandler("start", self._botStartCommand)
-        )
+        self._dispatcher.add_handler(CommandHandler("start", self._botStartCommand))
 
-        self._dispatcher.add_handler(
-            CommandHandler("reset", self._botResetCommand)
-        )
+        self._dispatcher.add_handler(CommandHandler("reset", self._botResetCommand))
 
-        self._dispatcher.add_handler(
-            CommandHandler("stop", self._botStopCommand)
-        )
+        self._dispatcher.add_handler(CommandHandler("stop", self._botStopCommand))
 
-        self._dispatcher.add_handler(
-            CommandHandler("status", self._botStatusCommand)
-        )
+        self._dispatcher.add_handler(CommandHandler("status", self._botStatusCommand))
 
         self._dispatcher.add_handler(
             CommandHandler("nextpost", self._botNextpostCommand)
         )
 
         self._dispatcher.add_handler(
-            CommandHandler(
-                "queue",
-                self._botQueueCommand,
-                pass_args=True
-            )
+            CommandHandler("queue", self._botQueueCommand, pass_args=True)
         )
 
         self._dispatcher.add_handler(
-            CommandHandler(
-                "subreddits",
-                self._botSubredditsCommand,
-                pass_args=True
-            )
+            CommandHandler("subreddits", self._botSubredditsCommand, pass_args=True)
         )
 
         self._dispatcher.add_handler(
-            CommandHandler(
-                "postsperday",
-                self._botPostsperdayCommand,
-                pass_args=True
-            )
+            CommandHandler("postsperday", self._botPostsperdayCommand, pass_args=True)
         )
 
         self._dispatcher.add_handler(
-            CommandHandler(
-                "preloadtime",
-                self._botPreloadtimeCommand,
-                pass_args=True
-            )
+            CommandHandler("preloadtime", self._botPreloadtimeCommand, pass_args=True)
         )
 
         self._dispatcher.add_handler(
-            CommandHandler(
-                "wordstoskip",
-                self._botWordstoskipCommand,
-                pass_args=True
-            )
+            CommandHandler("wordstoskip", self._botWordstoskipCommand, pass_args=True)
         )
 
         self._dispatcher.add_handler(
@@ -840,41 +716,22 @@ class Telegram:
 
         self._dispatcher.add_handler(
             CommandHandler(
-                "imagethreshold",
-                self._botImageThresholdCommand,
-                pass_args=True
+                "imagethreshold", self._botImageThresholdCommand, pass_args=True
             )
         )
 
         self._dispatcher.add_handler(
-            CommandHandler(
-                "startdelay",
-                self._botStartdelayCommand,
-                pass_args=True
-            )
+            CommandHandler("startdelay", self._botStartdelayCommand, pass_args=True)
         )
 
         self._dispatcher.add_handler(
-            CommandHandler(
-                "cleanqueue",
-                self._botCleanqueueCommand
-            )
+            CommandHandler("cleanqueue", self._botCleanqueueCommand)
         )
 
         # hidden command, not in list
-        self._dispatcher.add_handler(
-            CommandHandler(
-                "ping",
-                self._botPingCommand
-            )
-        )
+        self._dispatcher.add_handler(CommandHandler("ping", self._botPingCommand))
 
-        self._dispatcher.add_handler(
-            CommandHandler(
-                "version",
-                self._botVersionCommand
-            )
-        )
+        self._dispatcher.add_handler(CommandHandler("version", self._botVersionCommand))
 
         # this handler will notify the admins and the user if something went
         #   wrong during the execution
@@ -884,50 +741,52 @@ class Telegram:
         logging.info("Bot running")
         self._updater.idle()
 
-    @ property
+    @property
     def _posts_per_day(self):
-        """ Getter for the number of posts per day """
+        """Getter for the number of posts per day"""
         return self._settings["posts_per_day"]
 
-    @ _posts_per_day.setter
+    @_posts_per_day.setter
     def _posts_per_day(self, value):
-        """ Setter for the number of posts per day """
+        """Setter for the number of posts per day"""
         self._settings["posts_per_day"] = value
         self._saveSettings()
 
-    @ property
+    @property
     def _start_delay(self):
-        """ Getter for the start delay """
+        """Getter for the start delay"""
         return self._settings["start_delay"]
 
-    @ _start_delay.setter
+    @_start_delay.setter
     def _start_delay(self, value):
-        """ Setter for the start delay """
+        """Setter for the start delay"""
         self._settings["start_delay"] = value
         self._saveSettings()
 
-    @ property
+    @property
     def _preload_time(self):
-        """ Getter for the preload time """
+        """Getter for the preload time"""
         return self._settings["preload_time"]
 
-    @ _preload_time.setter
+    @_preload_time.setter
     def _preload_time(self, value):
-        """ Setter for the preload time """
+        """Setter for the preload time"""
         self._settings["preload_time"] = value
         self._saveSettings()
 
-    @ property
+    @property
     def _admins(self):
-        """ Getter for the admins list """
+        """Getter for the admins list"""
         return self._settings["admins"]
 
 
 def main():
-    logging.basicConfig(filename=__file__.replace(".py", ".log"),
-                        level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(message)s",
-                        filemode="w")
+    logging.basicConfig(
+        filename=__file__.replace(".py", ".log"),
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        filemode="w",
+    )
 
     logging.info("Script started")
 
@@ -936,5 +795,5 @@ def main():
     t.start()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

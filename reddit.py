@@ -13,10 +13,10 @@ from datetime import datetime
 
 class Reddit:
     """
-     This class handles all the connections to Reddit, including:
-        -Post Fetching
-        -Image OCR to prevent Reddit-only memes to be posted on Telegram
-        -Image Hashing to prevent reposts to be posted on Telegram
+    This class handles all the connections to Reddit, including:
+       -Post Fetching
+       -Image OCR to prevent Reddit-only memes to be posted on Telegram
+       -Image Hashing to prevent reposts to be posted on Telegram
     """
 
     def __init__(self):
@@ -30,13 +30,13 @@ class Reddit:
         self._login()
 
     def _loadSettings(self):
-        """Loads settings from file """
+        """Loads settings from file"""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Reddit"]
         logging.info("Settings loaded")
 
     def _saveSettings(self):
-        """Saves all settings to file """
+        """Saves all settings to file"""
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
@@ -47,7 +47,7 @@ class Reddit:
             ujson.dump(old_settings, outfile, indent=2)
 
     def _loadPosted(self):
-        """Loads list of already posted urls """
+        """Loads list of already posted urls"""
         try:
             with open(self._settings["posted_file"]) as json_file:
                 self._posted = ujson.load(json_file)
@@ -58,7 +58,7 @@ class Reddit:
             self._posted = []
 
     def _loadDiscarded(self):
-        """Loads list of already discarded urls """
+        """Loads list of already discarded urls"""
         try:
             with open(self._settings["discarded_file"]) as json_file:
                 self._discarded = ujson.load(json_file)
@@ -69,11 +69,11 @@ class Reddit:
             self._discarded = []
 
     def _login(self):
-        """Logins into Reddit app api """
+        """Logins into Reddit app api"""
         self.reddit = praw.Reddit(
             client_id=self._settings["id"],
             client_secret=self._settings["token"],
-            user_agent='PC'
+            user_agent="PC",
         )
 
     def _imageFingerprint(self, url, hash=True, ocr=True):
@@ -114,9 +114,7 @@ class Reddit:
 
                     # then remove all non printable characters
                     printable = set(string.printable)
-                    caption = "".join(
-                        filter(lambda x: x in printable, raw_caption)
-                    )
+                    caption = "".join(filter(lambda x: x in printable, raw_caption))
             else:
                 caption = None
 
@@ -124,14 +122,10 @@ class Reddit:
             im.close()
 
         except Exception as e:
-            logging.error(f"ERROR while fingerprinting {e} {url}")
+            logging.error(f"While fingerprinting. Error: {e}.ABCABC Image url: {url}")
             return None
 
-        return {
-            "hash": hash,
-            "string_hash": str(hash),
-            "caption": caption
-        }
+        return {"hash": hash, "string_hash": str(hash), "caption": caption}
 
     def _loadPosts(self):
         """Loads posts from reddit
@@ -147,8 +141,9 @@ class Reddit:
         self._posts = []
         subreddit_list = "+".join(self._settings["subreddits"])
 
-        for submission in self.reddit.subreddit(subreddit_list) \
-                .hot(limit=self._settings["request_limit"]):
+        for submission in self.reddit.subreddit(subreddit_list).hot(
+            limit=self._settings["request_limit"]
+        ):
 
             if not submission:
                 # we found nothing
@@ -183,7 +178,7 @@ class Reddit:
                     "title": title,
                     "caption": None,
                     "hash": None,
-                    "timestamp": timestamp
+                    "timestamp": timestamp,
                 }
             )
 
@@ -263,8 +258,7 @@ class Reddit:
 
         lower_caption = fingerprint["caption"].lower()
         # check if the title contains one of the words to skip
-        if any(word in lower_caption for word in
-               self._settings["words_to_skip"]):
+        if any(word in lower_caption for word in self._settings["words_to_skip"]):
             # we found one of the words to skip
             return True
 
@@ -327,10 +321,7 @@ class Reddit:
 
         # current loaded posts
         for post in self._posts:
-            logging.info(
-                "Trying to check if post is ok "
-                f"Post url: {post['url']}"
-            )
+            logging.info("Trying to check if post is ok " f"Post url: {post['url']}")
 
             # check if the image has already been posted
             if self._isAlreadyPosted(post):
@@ -521,9 +512,7 @@ class Reddit:
                 discarded["delete"] = True
 
         # Let's keep all the post that are not flagged and save it to file
-        new_discarded_data = [
-            x for x in discarded_data if "delete" not in x
-        ]
+        new_discarded_data = [x for x in discarded_data if "delete" not in x]
 
         # write new data to file
         with open(self._settings["discarded_file"], "w") as outfile:
@@ -544,13 +533,15 @@ class Reddit:
             hash=self._settings["hash_threshold"] > 0,
             ocr=self._settings["ocr"],
         )
-        self._post_queue.append({
-            "url": url,
-            "hash": fingerprint["string_hash"],
-            "caption":  fingerprint["caption"],
-            "id": None,
-            "timestamp": datetime.now().isoformat(),
-        })
+        self._post_queue.append(
+            {
+                "url": url,
+                "hash": fingerprint["string_hash"],
+                "caption": fingerprint["caption"],
+                "id": None,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
     def cleanQueue(self):
         self._post_queue = []
@@ -618,7 +609,7 @@ def main():
         filename=__file__.replace(".py", ".log"),
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
-        filemode="w"
+        filemode="w",
     )
 
     r = Reddit()
@@ -627,5 +618,5 @@ def main():
     r.cleanDiscarded()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
