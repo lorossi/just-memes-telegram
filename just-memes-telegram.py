@@ -165,7 +165,6 @@ class Telegram:
 
     def _botClearRoutine(self, context: CallbackContext):
         """Routines that handles the removal of old posts"""
-        # sourcery skip: class-extract-method
         message = "*Clear day routine!*"
         for chat_id in self._admins:
             context.bot.send_message(
@@ -332,7 +331,6 @@ class Telegram:
 
     def _botStatusCommand(self, update, context):
         """Function handling status command"""
-        # sourcery skip: extract-method
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:

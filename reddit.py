@@ -185,7 +185,7 @@ class Reddit:
         # we found at leat a post
         return len(self._posts)
 
-    def _isAlreadyDiscarded(self, post):  # sourcery skip: merge-nested-ifs
+    def _isAlreadyDiscarded(self, post):
         """Checks if the post has already been discarded
 
         Args:
@@ -215,7 +215,6 @@ class Reddit:
         Returns:
             [boolen]
         """
-        # sourcery skip: merge-nested-ifs
         for posted in self._posted:
             # check caption
             if fingerprint["caption"] and posted["caption"]:
@@ -238,7 +237,6 @@ class Reddit:
         return False
 
     def _containsSkipWords(self, post, fingerprint):
-        # sourcery skip: return-identity
         """Checks if the post contains words to be skipped
 
         Args:
@@ -265,7 +263,6 @@ class Reddit:
         return False
 
     def _isAlreadyPosted(self, post):
-        # sourcery skip: merge-nested-ifs
         """Checks if the post has already been posted
 
         Args:
@@ -286,7 +283,7 @@ class Reddit:
 
         return False
 
-    def _findNew(self):  # sourcery skip: extract-method
+    def _findNew(self):
         """Find new posts from the list of already loaded posts
         inside self._post list, as loaded by self._loadPosts
 
