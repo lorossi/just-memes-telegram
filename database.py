@@ -78,8 +78,8 @@ class Database:
             for x in self._db["fingerprints"].find({}, projection=["caption"])
         }
 
-    def addPostToDatabase(self, post: Post = None, fingerprint: Fingerprint = None):
-        """Adds a post (identified by Post and Fingerprint objects) to the database
+    def addData(self, post: Post = None, fingerprint: Fingerprint = None):
+        """Adds a post (either a Post or Fingerprint) to the database
 
         Args:
             post (Post, optional): [description]. Post object
