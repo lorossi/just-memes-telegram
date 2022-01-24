@@ -8,7 +8,7 @@ class GenericData:
         return asdict(self)
 
     def __str__(self) -> str:
-        return "\n".join([":".join(k, v) for k, v in self.serialize()])
+        return " - ".join([f"{k}: {v}" for k, v in self.serialize().items()])
 
 
 @dataclass
