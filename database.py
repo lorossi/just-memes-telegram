@@ -109,11 +109,12 @@ class Database:
         return posts.deleted_count, fingerprints.deleted_count
 
     @property
-    def settings(self) -> dict:
-        return self._settings
-
-    @property
     def is_connected(self) -> bool:
+        """Returns true if the client is connected to the database server
+
+        Returns:
+            bool
+        """
         try:
             self._client.server_info()
             return True
@@ -128,19 +129,34 @@ class Database:
 
     @property
     def mongodb_version(self) -> str:
+        """Returns the version of the mongodb server
+
+        Returns:
+            str
+        """
         try:
             return self._client.server_info()["version"]
         except pymongo.ServerSelectionTimeoutError:
             return None
 
+    @property
+    def stored_data(self) -> tuple[int, int]:
+        """Number of stored post and fingerprint documents in the database
+
+        Returns:
+            tuple[int, int]: first item is stored posts, second is stored fingerprints
+        """
+        return tuple(self._db[x].count_documents({}) for x in ["posts", "fingerprints"])
+
     def __str__(self) -> str:
-        connected = "connected" if self.is_connected else "not connected"
+
         return "\n\t· ".join(
             [
                 "Database:",
-                f"status: {connected}",
+                f"status: {'connected' if self.is_connected else 'not connected'}",
                 f"MongoDB version: {self.mongodb_version}",
                 f"MongoDB url: {self.mongodb_url}",
                 f"max days: {self._settings['max_days']}",
+                f"stored posts and fingerprints in database: {', '.join(str(x) for x in self.stored_data)}",
             ]
         )
