@@ -561,12 +561,13 @@ class Telegram:
     def __str__(self) -> str:
         next_post = self._calculateTiming()["next_post_timestamp_no_preload"]
         ocr = "on" if self._settings["ocr"] else "off"
-        return "\n\t".join(
+        return "\n\t· ".join(
             [
                 f"Telegram Bot:",
                 f"version {self._version}",
                 f"{len(self._queue)} posts in queue",
                 f"next post scheduled for {next_post}",
+                f"preload time {self._settings['preload_time']} minutes",
                 f"posts per day {self._settings['posts_per_day']}",
                 f"ocr {ocr}",
                 f"hash threshold: {self._settings['hash_threshold']}",

@@ -121,7 +121,7 @@ class Reddit:
 
     def __str__(self) -> str:
         subreddits = " ".join(self._settings["subreddits"])
-        return "\n\t".join(
+        return "\n\t· ".join(
             [
                 "Reddit:",
                 f"requests: {self._settings['request_limit']}",

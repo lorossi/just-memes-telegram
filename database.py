@@ -137,7 +137,7 @@ class Database:
 
     def __str__(self) -> str:
         connected = "connected" if self.is_connected else "not connected"
-        return "\n\t".join(
+        return "\n\t· ".join(
             [
                 "Database:",
                 f"status: {connected}",
