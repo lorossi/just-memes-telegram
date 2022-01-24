@@ -22,7 +22,6 @@
     "posts_per_day": 720,
     "hash_threshold": 10,
     "start_delay": 0,
-    "max_retries": 5,
     "preload_time": 1,
     "admins": ["LIST", "OF", "ADMINS", "CHAT", "ID"]
   }
