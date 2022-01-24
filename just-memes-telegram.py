@@ -67,62 +67,65 @@ class Telegram:
     def _secondsBetweenPosts(self) -> int:
         return int(24 * 60 * 60 / self._settings["posts_per_day"])
 
-    def _calculateNextPost(self) -> tuple[int, str]:
+    def _calculateNextPost(self, until_preload: int = None) -> tuple[int, str]:
         """Calculates seconds until next post and its timestamp
+
+        Args:
+            until_preload (int, optional): Seconds until next preload. If None, it's recalculated.
 
         Returns:
             tuple[int, str]: seconds until next post and its timestamp
         """
-        # convert second between posts into timedelta
-        seconds_between_posts = timedelta(seconds=self._secondsBetweenPosts())
-        # convert start delay into timedelta
-        delay_minutes = timedelta(minutes=self._settings["start_delay"])
+        if not until_preload:
+            until_preload = self._calculatePreload()
+
+        # convert preload into timedelta
+        next_preload_time = timedelta(seconds=until_preload)
         # convert preload time into timedelta
         preload_time = timedelta(minutes=self._settings["preload_time"])
         # remove seconds and microseconds from now
-        now = datetime.now().replace(second=0, microsecond=0)
+        now = datetime.now().replace(microsecond=0)
+        # seconds until next post
+        seconds_until = (next_preload_time + preload_time).seconds
+        # calculate next post timestamp
+        next_post = now + next_preload_time + preload_time
 
-        # starting time
-        next_post = (
-            datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            + delay_minutes
-        )
+        return (seconds_until, next_post.isoformat())
 
-        while next_post - preload_time <= now:
-            next_post += seconds_between_posts
-
-        # we add 30 seconds to actual time in order to make it closer to
-        # the real deal
-        seconds_until_next_post = (next_post - now).seconds + 30
-
-        return (seconds_until_next_post, next_post.isoformat())
-
-    def _calculatePreload(self, first_post: int) -> int:
+    def _calculatePreload(self) -> int:
         """Calculates seconds until preload
-
-        Args:
-            first_post [int]: Seconds until first post is posted
 
         Returns:
             int
         """
         # convert preload time into timedelta
-        preload_time = timedelta(seconds=self._settings["preload_time"])
+        preload_time = timedelta(minutes=self._settings["preload_time"])
         # convert firest post into timedelta
-        first = timedelta(seconds=first_post)
+        # convert second between posts into timedelta
+        seconds_between = timedelta(seconds=self._secondsBetweenPosts())
+        # convert start delay into timedelta
+        delay_minutes = timedelta(minutes=self._settings["start_delay"])
         # remove seconds and microseconds from now
-        now = datetime.now().replace(second=0, microsecond=0)
-        # this would be a big ooopsie
+        now = datetime.now().replace(microsecond=0)
+        # starting time
+        next_preload = (
+            datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            + delay_minutes
+            - preload_time
+        )
+        # loop until it's in the future
+        while next_preload <= now:
+            next_preload += seconds_between
 
-        return (now - first - preload_time).second
+        return (next_preload - now).seconds
 
     def _isAdmin(self, chat_id: str) -> bool:
         return chat_id in self._settings["admins"]
 
     def _setMemesRoutineInterval(self) -> None:
         """Create routine to send memes."""
-        until_first, _ = self._calculateNextPost()
-        until_preload = self._calculatePreload(until_first)
+        until_preload = self._calculatePreload()
+        until_first, _ = self._calculateNextPost(until_preload)
         seconds_between = self._secondsBetweenPosts()
         # we remove already started jobs from the schedule
         # (this happens when we change the number of posts per day or
