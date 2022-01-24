@@ -38,7 +38,7 @@ class Fingerprinter:
 
         return "".join([c if c in printable else "" for c in clean])
 
-    def fingerprint(self, url, hash=True, ocr=True):
+    def fingerprint(self, url, hash=True, ocr=True) -> Fingerprint:
         """Fingerprints an image by providing its url
 
         Args:
@@ -47,7 +47,7 @@ class Fingerprinter:
             ocr (bool, optional): Should the image be scanned with OCR?
 
         Returns:
-            Post
+            Fingerprint
         """
         timestamp = time()
         try:
