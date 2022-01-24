@@ -78,4 +78,4 @@ class Fingerprinter:
         return self._settings
 
     def __str__(self) -> str:
-        return "Fingerprinter:" f"\n\timagehash version: {imagehash.__version__}"
+        return "Fingerprinter:" f"\n\t· imagehash version: {imagehash.__version__}"
