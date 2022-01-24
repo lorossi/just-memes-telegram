@@ -4,6 +4,7 @@ import requests
 import imagehash
 import pytesseract
 
+
 from PIL import Image
 from time import time
 from data import Fingerprint
@@ -74,8 +75,19 @@ class Fingerprinter:
         return Fingerprint(caption, hash, str(hash), url, timestamp)
 
     @property
-    def settings(self) -> dict:
-        return self._settings
+    def pytesseract_version(self) -> str:
+        return str(pytesseract.get_tesseract_version()).split("\n")[0]
 
     def __str__(self) -> str:
-        return "Fingerprinter:" f"\n\t· imagehash version: {imagehash.__version__}"
+        return "\n\t· ".join(
+            [
+                "Fingerprinter:",
+                f"imagehash version: {imagehash.__version__}",
+                f"pytesseract version: {pytesseract.__version__}",
+                f"tesseract version: {self.pytesseract_version }",
+            ]
+        )
+
+
+f = Fingerprinter()
+print(f)
