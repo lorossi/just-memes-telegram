@@ -14,9 +14,11 @@ class Reddit:
     def __init__(self) -> None:
         self._settings = {}
         self._settings_path = "settings/settings.json"
-
         self._loadSettings()
         self._login()
+
+    def _isVideo(self, url) -> bool:
+        return "v.redd.it" in url
 
     def _loadSettings(self) -> None:
         """Loads settings from file"""
@@ -42,7 +44,7 @@ class Reddit:
             user_agent="PC",
         )
 
-    def _loadPosts(self) -> list[Post]:
+    def _loadPosts(self, include_videos: bool = False) -> list[Post]:
         """Loads posts from reddit
 
         Returns:
@@ -65,16 +67,15 @@ class Reddit:
             if submission.selftext or submission.stickied:
                 continue
 
-            # skip gifs, videos, galleries
-            if any(u in submission.url for u in ["v.redd.it", ".gif", "gallery"]):
+            # skip galleries and videos
+            if any(x in submission.url for x in [".gif", "gallery"]):
                 continue
 
-            # fail-proof way of discovering the post's subreddit
-            if submission.subreddit_name_prefixed:
-                subreddit = submission.subreddit_name_prefixed
-            else:
-                subreddit = None
+            # skip gifs and videos if flag is set
+            if not include_videos and self._isVideo(submission.url):
+                continue
 
+            subreddit = submission.subreddit.display_name
             title = submission.title or None
             score = submission.score or -1
 
@@ -87,19 +88,20 @@ class Reddit:
                     title,
                     score,
                     timestamp,
+                    self._isVideo(submission.url),
                 )
             )
 
         return sorted(posts, key=lambda x: x.score, reverse=True)
 
-    def fetch(self) -> list[Post]:
+    def fetch(self, include_videos: bool = False) -> list[Post]:
         """
         Fetch posts from Reddit.
-        Posts are returned sorted by score
+        Posts are returned sorted by score.
         """
         logging.info("Fetching new memes.")
 
-        posts = self._loadPosts()
+        posts = self._loadPosts(include_videos=include_videos)
 
         logging.info(f"{len(posts)} posts found.")
         logging.info("Memes fetched.")
