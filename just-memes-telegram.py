@@ -77,7 +77,7 @@ class Telegram:
             tuple[int, str]: seconds until next post and its timestamp
         """
         if not until_preload:
-            until_preload = self._calculatePreload()
+            until_preload, _ = self._calculatePreload()
 
         # convert preload into timedelta
         next_preload_time = timedelta(seconds=until_preload)
@@ -90,13 +90,13 @@ class Telegram:
         # calculate next post timestamp
         next_post = now + next_preload_time + preload_time
 
-        return (seconds_until, next_post.isoformat())
+        return seconds_until, next_post.isoformat()
 
-    def _calculatePreload(self) -> int:
-        """Calculates seconds until preload
+    def _calculatePreload(self) -> tuple[int, str]:
+        """Calculates seconds until next preload and its timestamp
 
         Returns:
-            int
+            tuple[int, str]: seconds until next preload and its timestamp
         """
         # convert preload time into timedelta
         preload_time = timedelta(minutes=self._settings["preload_time"])
@@ -117,14 +117,14 @@ class Telegram:
         while next_preload <= now:
             next_preload += seconds_between
 
-        return (next_preload - now).seconds
+        return (next_preload - now).seconds, next_preload.isoformat()
 
     def _isAdmin(self, chat_id: str) -> bool:
         return chat_id in self._settings["admins"]
 
     def _setMemesRoutineInterval(self) -> None:
         """Create routine to send memes."""
-        until_preload = self._calculatePreload()
+        until_preload, _ = self._calculatePreload()
         until_first, _ = self._calculateNextPost(until_preload)
         seconds_between = self._secondsBetweenPosts()
         # we remove already started jobs from the schedule
@@ -366,14 +366,15 @@ class Telegram:
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
-            _, timestamp = self._calculateNextPost()
-            if timestamp:
-                message = "_The next meme is scheduled for:_ " f"{timestamp}"
-            else:
-                message = (
-                    "_The bot hasn't completed it startup process yet. "
-                    " Wait a few seconds!_"
-                )
+            next_preload, preload_timestamp = self._calculatePreload()
+            _, post_timestamp = self._calculateNextPost(next_preload)
+            message = (
+                "_The next meme is scheduled for:_ "
+                f"{post_timestamp}.\n"
+                "_The next preload is scheduled for:_ "
+                f"{preload_timestamp}."
+            )
+
         else:
             message = "*This command is for admins only*"
 
@@ -570,14 +571,14 @@ class Telegram:
 
     def __str__(self) -> str:
         _, timestamp = self._calculateNextPost()
-        ocr = "on" if self._settings["ocr"] else "off"
+        ocr = "enabled" if self._settings["ocr"] else "off"
         return "\n\t· ".join(
             [
                 f"Telegram Bot:",
                 f"version {self._version}",
-                f"{len(self._queue)} posts in queue",
+                f"{len(self._queue)} post(s) in queue",
                 f"next post scheduled for {timestamp}",
-                f"preload time {self._settings['preload_time']} minutes",
+                f"preload time {self._settings['preload_time']} minute(s)",
                 f"posts per day {self._settings['posts_per_day']}",
                 f"ocr {ocr}",
                 f"hash threshold: {self._settings['hash_threshold']}",
