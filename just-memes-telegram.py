@@ -82,7 +82,7 @@ class Telegram:
         # convert preload into timedelta
         next_preload_time = timedelta(seconds=until_preload)
         # convert preload time into timedelta
-        preload_time = timedelta(minutes=self._settings["preload_time"])
+        preload_time = timedelta(seconds=self._settings["preload_time"])
         # remove seconds and microseconds from now
         now = datetime.now().replace(microsecond=0)
         # seconds until next post
@@ -99,12 +99,12 @@ class Telegram:
             tuple[int, str]: seconds until next preload and its timestamp
         """
         # convert preload time into timedelta
-        preload_time = timedelta(minutes=self._settings["preload_time"])
+        preload_time = timedelta(seconds=self._settings["preload_time"])
         # convert firest post into timedelta
         # convert second between posts into timedelta
         seconds_between = timedelta(seconds=self._secondsBetweenPosts())
         # convert start delay into timedelta
-        delay_minutes = timedelta(minutes=self._settings["start_delay"])
+        delay_minutes = timedelta(seconds=self._settings["start_delay"])
         # remove seconds and microseconds from now
         now = datetime.now().replace(microsecond=0)
         # starting time
@@ -205,19 +205,28 @@ class Telegram:
             logging.info(f"Looking for a post between {len(to_check)} preloaded posts.")
 
             for post in to_check:
+                # this post can get approved or rejected
+                # either way, it should not be scanned again
+                self._database.addData(post=post)
+
                 # check if title contains anything not permitted
                 if any(s in post.title for s in self._settings["words_to_skip"]):
                     logging.info("Skipping. Title contains skippable words.")
                     # update database
-                    self._database.addPostToDatabase(post=post)
                     continue
 
                 # if video is url, skip fingerprinting
-                if not post.video:
+                if post.video:
+                    path = self._video_downloader.downloadVideo(post.url)
+                    if path:
+                        post.path = path
+                    else:
+                        continue
+                else:
                     # fingerprint the post
                     fingerprint = self._fingerprinter.fingerprint(post.url)
                     # update the database with post and fingerprint
-                    self._database.addPostToDatabase(post=post, fingerprint=fingerprint)
+                    self._database.addData(fingerprint=fingerprint)
 
                     # check if the new post is too similar to an older one
                     if any(
@@ -235,9 +244,6 @@ class Telegram:
                         ):
                             logging.info("Skipping. Caption contains skippable words.")
                             continue
-                else:
-                    post.path = self._video_downloader.downloadVideo(post.url)
-                    self._database.addPostToDatabase(post=post)
 
                 # a post has been found
                 # adds the photo to bot queue so we can use this later
@@ -362,7 +368,13 @@ class Telegram:
             message = "\n\n".join(
                 [
                     self._escapeMarkdown(str(x))
-                    for x in [self, self._reddit, self._database, self._fingerprinter]
+                    for x in [
+                        self,
+                        self._reddit,
+                        self._database,
+                        self._fingerprinter,
+                        self._video_downloader,
+                    ]
                 ]
             )
 
@@ -416,7 +428,7 @@ class Telegram:
                     # fingerprint it and add it to database
                     post = Post(url=url, timestamp=time())
                     fingerprint = self._fingerprinter.fingerprint(post)
-                    self._database.addPostToDatabase(post=post, fingerprint=fingerprint)
+                    self._database.addData(post=post, fingerprint=fingerprint)
                     # add it to queue
                     self._queue.append(post)
 
@@ -589,13 +601,14 @@ class Telegram:
         return "\n\t· ".join(
             [
                 f"Telegram Bot:",
-                f"version {self._version}",
-                f"{len(self._queue)} post(s) in queue",
-                f"next post scheduled for {post_timestamp}",
-                f"next preload scheduled for {preload_timestamp}",
-                f"preload time {self._settings['preload_time']} minute(s)",
-                f"posts per day {self._settings['posts_per_day']}",
-                f"ocr {ocr}",
+                f"version: {self._version}",
+                f"queue size: {len(self._queue)}",
+                f"next post scheduled for: {post_timestamp}",
+                f"next preload scheduled for: {preload_timestamp}",
+                f"preload time: {self._settings['preload_time']} seconds(s)",
+                f"start delay: {self._settings['start_delay']} second(s)",
+                f"posts per day: {self._settings['posts_per_day']}",
+                f"ocr: {ocr}",
                 f"hash threshold: {self._settings['hash_threshold']}",
             ]
         )
