@@ -269,7 +269,7 @@ class Telegram:
             context.bot.send_photo(chat_id=channel_name, photo=new_url, caption=caption)
         else:
             context.bot.send_video(
-                chat_id=channel_name, vide=open(post.path, "rb"), caption=caption
+                chat_id=channel_name, video=open(post.path, "rb"), caption=caption
             )
             self._video_downloader.deleteVideo()
 
