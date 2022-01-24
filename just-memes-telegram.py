@@ -67,66 +67,62 @@ class Telegram:
     def _secondsBetweenPosts(self) -> int:
         return int(24 * 60 * 60 / self._settings["posts_per_day"])
 
-    def _calculateTiming(self) -> tuple[int, str]:
-        """Calculates seconds between posts and until next post"""
+    def _calculateNextPost(self) -> tuple[int, str]:
+        """Calculates seconds until next post and its timestamp
 
-        # calculation of time between messages
-        # convert minutes between messages into timedelta
-        minutes_between_messages = timedelta(minutes=self._secondsBetweenPosts() * 60)
+        Returns:
+            tuple[int, str]: seconds until next post and its timestamp
+        """
+        # convert second between posts into timedelta
+        seconds_between_posts = timedelta(seconds=self._secondsBetweenPosts())
         # convert start delay into timedelta
         delay_minutes = timedelta(minutes=self._settings["start_delay"])
-
-        # starting time
-        midnight = (
-            datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            + delay_minutes
-        )
+        # convert preload time into timedelta
+        preload_time = timedelta(minutes=self._settings["preload_time"])
         # remove seconds and microseconds from now
         now = datetime.now().replace(second=0, microsecond=0)
 
-        # Do the same but without accounting for preload
-        next_post = midnight
-        while next_post <= now:
-            next_post += minutes_between_messages
+        # starting time
+        next_post = (
+            datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            + delay_minutes
+        )
 
-        # To avoid rounding errors we recalculate the current time
-        now = datetime.now()
+        while next_post - preload_time <= now:
+            next_post += seconds_between_posts
+
         # we add 30 seconds to actual time in order to make it closer to
         # the real deal
         seconds_until_next_post = (next_post - now).seconds + 30
 
         return (seconds_until_next_post, next_post.isoformat())
 
-    def _calculatePreload(self) -> float:
-        # calculation of time between messages
-        # convert minutes between messages into timedelta
-        minutes_between_messages = timedelta(minutes=self._secondsBetweenPosts() * 60)
-        # convert start delay into timedelta
-        delay_minutes = timedelta(minutes=self._settings["start_delay"])
-        # convert preload time into timedelta
-        preload_time = timedelta(minutes=self._settings["preload_time"])
+    def _calculatePreload(self, first_post: int) -> int:
+        """Calculates seconds until preload
 
-        # starting time
-        midnight = (
-            datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            + delay_minutes
-        )
+        Args:
+            first_post [int]: Seconds until first post is posted
+
+        Returns:
+            int
+        """
+        # convert preload time into timedelta
+        preload_time = timedelta(seconds=self._settings["preload_time"])
+        # convert firest post into timedelta
+        first = timedelta(seconds=first_post)
         # remove seconds and microseconds from now
         now = datetime.now().replace(second=0, microsecond=0)
-        # Initialize the loop to add an interval until we are in the future
-        next_post = midnight
-        while next_post - preload_time <= now:
-            next_post += minutes_between_messages
+        # this would be a big ooopsie
 
-        return (next_post - now - preload_time).seconds
+        return (now - first - preload_time).second
 
     def _isAdmin(self, chat_id: str) -> bool:
         return chat_id in self._settings["admins"]
 
     def _setMemesRoutineInterval(self) -> None:
         """Create routine to send memes."""
-        until_first, _ = self._calculateTiming()
-        until_preload = self._calculatePreload()
+        until_first, _ = self._calculateNextPost()
+        until_preload = self._calculatePreload(until_first)
         seconds_between = self._secondsBetweenPosts()
         # we remove already started jobs from the schedule
         # (this happens when we change the number of posts per day or
@@ -367,7 +363,7 @@ class Telegram:
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
-            _, timestamp = self._calculateTiming()
+            _, timestamp = self._calculateNextPost()
             if timestamp:
                 message = "_The next meme is scheduled for:_ " f"{timestamp}"
             else:
@@ -570,7 +566,7 @@ class Telegram:
         self._updater.idle()
 
     def __str__(self) -> str:
-        _, timestamp = self._calculateTiming()
+        _, timestamp = self._calculateNextPost()
         ocr = "on" if self._settings["ocr"] else "off"
         return "\n\t· ".join(
             [
