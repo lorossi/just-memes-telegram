@@ -1,3 +1,4 @@
+from black import re
 import ujson
 import pymongo
 import logging
@@ -18,7 +19,6 @@ class Database:
         """Loads settings from file"""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Database"]
-        logging.info("Settings loaded")
 
     def _connect(self):
         """Creates client and connects to MongoDB database. Url is loaded from file"""
@@ -110,13 +110,39 @@ class Database:
         # return number of delete documents
         return posts.deleted_count, fingerprints.deleted_count
 
+    @property
+    def settings(self) -> dict:
+        return self._settings
 
-def main():
-    d = Database()
-    print(d.getOldHashes())
-    print(d.getOldIds())
-    print(d.getOldUrls())
+    @property
+    def is_connected(self) -> bool:
+        try:
+            self._client.server_info()
+            return True
+        except pymongo.ServerSelectionTimeoutError:
+            return False
 
+    @property
+    def mongodb_url(self) -> str:
+        if self.is_connected:
+            return self._settings["mongodb_url"]
+        return None
 
-if __name__ == "__main__":
-    main()
+    @property
+    def mongodb_version(self) -> str:
+        try:
+            return self._client.server_info()["version"]
+        except pymongo.ServerSelectionTimeoutError:
+            return None
+
+    def __str__(self) -> str:
+        connected = "connected" if self.is_connected else "not connected"
+        return "\n\t".join(
+            [
+                "Database:",
+                f"status: {connected}",
+                f"MongoDB version: {self.mongodb_version}",
+                f"MongoDB url: {self.mongodb_url}",
+                f"max days: {self._settings['max_days']}",
+            ]
+        )

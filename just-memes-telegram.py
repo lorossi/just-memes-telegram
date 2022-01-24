@@ -2,7 +2,8 @@ import os
 import sys
 import ujson
 import logging
-from time import sleep, time
+
+from time import time
 from datetime import datetime, time, timedelta
 from telegram import ParseMode, ChatAction
 from telegram.ext import Updater, CommandHandler, CallbackContext
@@ -25,7 +26,6 @@ class Telegram:
     subreddits - views and sets source subreddits
     postsperday - views and sets number of posts per day
     cleanqueue - cleans queue
-    version - show bot version
     """
 
     def __init__(self):
@@ -41,12 +41,12 @@ class Telegram:
 
     # Private methods
 
-    def _loadSettings(self):
+    def _loadSettings(self) -> None:
         """Loads settings from file"""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Telegram"]
 
-    def _saveSettings(self):
+    def _saveSettings(self) -> None:
         """Saves settings to file"""
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
@@ -57,14 +57,14 @@ class Telegram:
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
 
-    def _escapeMarkdown(self, str):
+    def _escapeMarkdown(self, str) -> str:
         """Replaces markdown delimites with escaped ones"""
         to_replace = ["_", "*", "[", "`"]
         for replace in to_replace:
             str = str.replace(replace, f"\\{replace}")
         return str
 
-    def _calculateTiming(self):
+    def _calculateTiming(self) -> dict:
         """Calculates seconds between posts and until next post"""
 
         # calculation of time between messages
@@ -111,7 +111,7 @@ class Telegram:
     def _isAdmin(self, chat_id: str) -> bool:
         return chat_id in self._settings["admins"]
 
-    def _setMemesRoutineInterval(self):
+    def _setMemesRoutineInterval(self) -> None:
         """Create routine to send memes."""
         timing = self._calculateTiming()
         # we remove already started jobs from the schedule
@@ -146,10 +146,9 @@ class Telegram:
 
     # Bot routines
 
-    def _botStartupRoutine(self, context: CallbackContext):
+    def _botStartupRoutine(self, context: CallbackContext) -> None:
         """Sends a message to admins when the bot is started"""
         logging.info("Starting startup routine...")
-        self._setMemesRoutineInterval()
 
         message = "*Bot started!*"
         for chat_id in self._settings["admins"]:
@@ -159,19 +158,9 @@ class Telegram:
 
         logging.info("Startup routine completed.")
 
-    def _botClearRoutine(self, context: CallbackContext):
-        # TODO this has to be tested
+    def _botClearDatabaseRoutine(self, context: CallbackContext) -> None:
         """Routines that handles the removal of old posts"""
-        logging.info("Starting clear routine...")
-
-        message = "*Clear day routine!*"
-        for chat_id in self._settings["admins"]:
-            context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.MARKDOWN,
-                disable_notification=True,
-            )
+        logging.info("Clear database routine begins.")
 
         posts, fingerprints = self._database.clean()
         logging.info(
@@ -179,11 +168,11 @@ class Telegram:
             "of old data removed from database."
         )
 
-        logging.info("New day routine completed.")
+        logging.info("Clear database routine completed.")
 
-    def _botPreloadmemeRoutine(self, _: CallbackContext):
+    def _botPreloadmemeRoutine(self, _: CallbackContext) -> None:
         """Routine that preloads memes and puts them into queue"""
-        logging.info("Preload memes routine begins")
+        logging.info("Preload memes routine begins.")
         # load url from reddit
 
         if not self._queue:
@@ -200,7 +189,7 @@ class Telegram:
                 if p.id not in old_ids and p.url not in old_urls
             ]
 
-            logging.info(f"Looking for a post between {len(to_check)} posts preloaded")
+            logging.info(f"Looking for a post between {len(to_check)} preloaded posts.")
 
             for post in to_check:
                 # check if title contains anything not permitted
@@ -243,7 +232,7 @@ class Telegram:
 
         logging.info("Preload memes routine completed.")
 
-    def _botSendmemeRoutine(self, context: CallbackContext):
+    def _botSendmemeRoutine(self, context: CallbackContext) -> None:
         """Routine that send memes when it's time to do so"""
         logging.info("Sending memes routine begins.")
 
@@ -257,33 +246,11 @@ class Telegram:
         new_url = self._queue.pop(0).url
         logging.info(f"Sending image with url {new_url}.")
 
-        count = 0
-        max_retries = self._settings["max_retries"]
-        while True:
-            try:
-                context.bot.send_photo(
-                    chat_id=channel_name, photo=new_url, caption=caption
-                )
-                logging.info("Image sent.")
-                break
-
-            except Exception as e:
-                count += 1
-                logging.error(
-                    "Cannot send photo. "
-                    f"Error {e}. "
-                    f"Try {count} of {max_retries}."
-                )
-
-                if count == max_retries:
-                    logging.error("Could not send the image. Aborting.")
-                    break
-
-                sleep(10)
+        context.bot.send_photo(chat_id=channel_name, photo=new_url, caption=caption)
 
         logging.info("Sending memes routine completed.")
 
-    def _botError(self, update, context):
+    def _botError(self, update, context) -> None:
         """Function that sends a message to admins whenever
         an error is raised"""
         message = "*ERROR RAISED*"
@@ -311,7 +278,7 @@ class Telegram:
         logging.error(f"Update {update} caused error {context.error}.")
 
     # Bot commands
-    def _botStartCommand(self, update, context):
+    def _botStartCommand(self, update, context) -> None:
         """Function handling start command"""
         chat_id = update.effective_chat.id
 
@@ -325,7 +292,7 @@ class Telegram:
             chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
-    def _botResetCommand(self, update, context):
+    def _botResetCommand(self, update, context) -> None:
         """Function handling reset command"""
         chat_id = update.effective_chat.id
 
@@ -344,7 +311,7 @@ class Telegram:
                 chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
             )
 
-    def _botStopCommand(self, update, context):
+    def _botStopCommand(self, update, context) -> None:
         """Function handling stop command"""
         chat_id = update.effective_chat.id
 
@@ -362,21 +329,16 @@ class Telegram:
                 chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
             )
 
-    def _botStatusCommand(self, update, context):
+    def _botStatusCommand(self, update, context) -> None:
         """Function handling status command"""
-        # TODO clean this, maybe it's not really necessary
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
-            # first, post bot status
-            message = "*Bot status*\n"
-            message += f"Version: {self._version}"
-            # every dump is replaced to escape the underscore
-
-            # then, post telegram status
-            message += "\n\n*Telegram status*\n"
-            message += self._escapeMarkdown(
-                ujson.dumps(self._settings, indent=4, sort_keys=True)
+            message = "\n\n".join(
+                [
+                    self._escapeMarkdown(str(x))
+                    for x in [self, self._reddit, self._database, self._fingerprinter]
+                ]
             )
 
         else:
@@ -386,7 +348,7 @@ class Telegram:
             chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
-    def _botNextpostCommand(self, update, context):
+    def _botNextpostCommand(self, update, context) -> None:
         """Function handling nextpost command"""
         chat_id = update.effective_chat.id
 
@@ -409,7 +371,7 @@ class Telegram:
             chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
-    def _botQueueCommand(self, update, context):
+    def _botQueueCommand(self, update, context) -> None:
         """Function handling queue command"""
         chat_id = update.effective_chat.id
 
@@ -449,7 +411,7 @@ class Telegram:
             disable_web_page_preview=True,
         )
 
-    def _botSubredditsCommand(self, update, context):
+    def _botSubredditsCommand(self, update, context) -> None:
         """Function handling subreddits command"""
         chat_id = update.effective_chat.id
 
@@ -476,7 +438,7 @@ class Telegram:
             chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
-    def _botPostsperdayCommand(self, update, context):
+    def _botPostsperdayCommand(self, update, context) -> None:
         """Function handling postsperday command"""
         chat_id = update.effective_chat.id
 
@@ -508,7 +470,7 @@ class Telegram:
             chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
-    def _botCleanqueueCommand(self, update, context):
+    def _botCleanqueueCommand(self, update, context) -> None:
         """Function handling cleanqueue command"""
         chat_id = update.effective_chat.id
 
@@ -521,7 +483,7 @@ class Telegram:
             chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
-    def _botPingCommand(self, update, context):
+    def _botPingCommand(self, update, context) -> None:
         """Function handling ping command"""
         chat_id = update.effective_chat.id
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
@@ -530,21 +492,7 @@ class Telegram:
             chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
         )
 
-    def _botVersionCommand(self, update, context):
-        """Function handling version command"""
-        chat_id = update.effective_chat.id
-
-        if self._isAdmin(chat_id):
-            escaped_version = self._escapeMarkdown(self._version)
-            message = "_Version:_ " f"{escaped_version}"
-        else:
-            message = "*This command is for admins only*"
-
-        context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
-        )
-
-    def start(self):
+    def start(self) -> None:
         """Function that starts the bot in all its components"""
 
         # create instances
@@ -562,8 +510,13 @@ class Telegram:
 
         # this routine will clean the posted list
         self._jobqueue.run_daily(
-            self._botClearRoutine, time(0, 15, 0, 000000), name="new_day_routine"
+            self._botClearDatabaseRoutine,
+            time(0, 15, 0, 000000),
+            name="new_day_routine",
         )
+
+        # init Routines
+        self._setMemesRoutineInterval()
 
         # these are the handlers for all the commands
         self._dispatcher.add_handler(CommandHandler("start", self._botStartCommand))
@@ -594,8 +547,6 @@ class Telegram:
             CommandHandler("cleanqueue", self._botCleanqueueCommand)
         )
 
-        self._dispatcher.add_handler(CommandHandler("version", self._botVersionCommand))
-
         # hidden command, not in list
         self._dispatcher.add_handler(CommandHandler("ping", self._botPingCommand))
 
@@ -606,6 +557,21 @@ class Telegram:
         self._updater.start_polling()
         logging.info("Bot running.")
         self._updater.idle()
+
+    def __str__(self) -> str:
+        next_post = self._calculateTiming()["next_post_timestamp_no_preload"]
+        ocr = "on" if self._settings["ocr"] else "off"
+        return "\n\t".join(
+            [
+                f"Telegram Bot:",
+                f"version {self._version}",
+                f"{len(self._queue)} posts in queue",
+                f"next post scheduled for {next_post}",
+                f"posts per day {self._settings['posts_per_day']}",
+                f"ocr {ocr}",
+                f"hash threshold: {self._settings['hash_threshold']}",
+            ]
+        )
 
 
 def main():

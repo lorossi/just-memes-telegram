@@ -19,18 +19,6 @@ class Fingerprinter:
         """Loads settings from file"""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Fingerprinter"]
-        logging.info("Settings loaded")
-
-    def _saveSettings(self):
-        """Saves all settings to file"""
-        with open(self._settings_path) as json_file:
-            old_settings = ujson.load(json_file)
-
-        # update old dictionary
-        old_settings["Fingerprinter"].update(self._settings)
-
-        with open(self._settings_path, "w") as outfile:
-            ujson.dump(old_settings, outfile, indent=2)
 
     def _cleanText(self, text: str) -> str:
         """Cleans text by removing multiple spaces and unprintable characters
@@ -84,3 +72,10 @@ class Fingerprinter:
             return None
 
         return Fingerprint(caption, hash, str(hash), url, timestamp)
+
+    @property
+    def settings(self) -> dict:
+        return self._settings
+
+    def __str__(self) -> str:
+        return "Fingerprinter:" f"\n\timagehash version: {imagehash.__version__}"

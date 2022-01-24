@@ -1,6 +1,5 @@
 from dataclasses import dataclass, asdict
 from time import time
-from ujson import dumps
 
 
 @dataclass
@@ -9,7 +8,7 @@ class GenericData:
         return asdict(self)
 
     def __str__(self) -> str:
-        return dumps(self.serialize(), indent=2)
+        return "\n".join([":".join(k, v) for k, v in self.serialize()])
 
 
 @dataclass

@@ -22,7 +22,6 @@ class Reddit:
         """Loads settings from file"""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Reddit"]
-        logging.info("Settings loaded")
 
     def _saveSettings(self) -> None:
         """Saves all settings to file"""
@@ -49,14 +48,11 @@ class Reddit:
         Returns:
             [int]: [number of posts loaded]
         """
-        logging.info("Loading new posts...")
         # Loads new posts
         timestamp = time()
-
         posts = []
 
         subreddit_list = "+".join(self._settings["subreddits"])
-
         for submission in self.reddit.subreddit(subreddit_list).hot(
             limit=self._settings["request_limit"]
         ):
@@ -101,12 +97,12 @@ class Reddit:
         Fetch posts from Reddit.
         Posts are returned sorted by score
         """
-        logging.info("Fetching new memes...")
+        logging.info("Fetching new memes.")
 
         posts = self._loadPosts()
 
-        logging.info(f"{len(posts)} posts found!")
-        logging.info("Memes fetched")
+        logging.info(f"{len(posts)} posts found.")
+        logging.info("Memes fetched.")
 
         return posts
 
@@ -118,3 +114,17 @@ class Reddit:
     def subreddits(self, subreddits):
         self._settings["subreddits"] = [r for r in subreddits]
         self._saveSettings()
+
+    @property
+    def settings(self) -> dict:
+        return self._settings
+
+    def __str__(self) -> str:
+        subreddits = " ".join(self._settings["subreddits"])
+        return "\n\t".join(
+            [
+                "Reddit:",
+                f"requests: {self._settings['request_limit']}",
+                f"subreddits: {subreddits}",
+            ]
+        )
