@@ -87,7 +87,3 @@ class Fingerprinter:
                 f"tesseract version: {self.pytesseract_version }",
             ]
         )
-
-
-f = Fingerprinter()
-print(f)
