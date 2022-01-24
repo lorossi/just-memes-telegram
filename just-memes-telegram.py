@@ -35,7 +35,6 @@ class Telegram:
         self._queue = []
         self._send_memes_job = None
         self._preload_memes_job = None
-        self._next_post_timestamp = None
 
         self._loadSettings()
 
@@ -90,7 +89,7 @@ class Telegram:
         # calculate next post timestamp
         next_post = now + next_preload_time + preload_time
 
-        return seconds_until, next_post.isoformat()
+        return seconds_until, next_post.isoformat(sep=" ")
 
     def _calculatePreload(self) -> tuple[int, str]:
         """Calculates seconds until next preload and its timestamp
@@ -117,7 +116,7 @@ class Telegram:
         while next_preload <= now:
             next_preload += seconds_between
 
-        return (next_preload - now).seconds, next_preload.isoformat()
+        return (next_preload - now).seconds, next_preload.isoformat(sep=" ")
 
     def _isAdmin(self, chat_id: str) -> bool:
         return chat_id in self._settings["admins"]
@@ -274,7 +273,7 @@ class Telegram:
             )
 
         error_string = str(context.error)
-        time_string = datetime.now().isoformat()
+        time_string = datetime.now().isoformat(sep=" ")
 
         message = (
             f"Error at time: {time_string}\n"
@@ -570,14 +569,16 @@ class Telegram:
         self._updater.idle()
 
     def __str__(self) -> str:
-        _, timestamp = self._calculateNextPost()
+        next_preload, preload_timestamp = self._calculatePreload()
+        _, post_timestamp = self._calculateNextPost(next_preload)
         ocr = "enabled" if self._settings["ocr"] else "off"
         return "\n\t· ".join(
             [
                 f"Telegram Bot:",
                 f"version {self._version}",
                 f"{len(self._queue)} post(s) in queue",
-                f"next post scheduled for {timestamp}",
+                f"next post scheduled for {post_timestamp}",
+                f"next preload scheduled for {preload_timestamp}",
                 f"preload time {self._settings['preload_time']} minute(s)",
                 f"posts per day {self._settings['posts_per_day']}",
                 f"ocr {ocr}",
