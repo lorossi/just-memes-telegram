@@ -1,7 +1,6 @@
 *.log
+*.mp4
 .vscode
 venv
 __pycache__
 settings*.json
-posted.json
-discarded.json
