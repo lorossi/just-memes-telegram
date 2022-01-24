@@ -8,10 +8,11 @@ from datetime import datetime, time, timedelta
 from telegram import ParseMode, ChatAction
 from telegram.ext import Updater, CommandHandler, CallbackContext
 
+from data import Post
 from reddit import Reddit
 from database import Database
 from fingerprinter import Fingerprinter
-from data import Post
+from videodownloader import VideoDownloader
 
 
 class Telegram:
@@ -197,7 +198,7 @@ class Telegram:
             # filter images that match old ids or old urls
             to_check = [
                 p
-                for p in self._reddit.fetch()
+                for p in self._reddit.fetch(include_videos=True)
                 if p.id not in old_ids and p.url not in old_urls
             ]
 
@@ -211,27 +212,32 @@ class Telegram:
                     self._database.addPostToDatabase(post=post)
                     continue
 
-                # fingerprint the post
-                fingerprint = self._fingerprinter.fingerprint(post.url)
-                # update the database with post and fingerprint
-                self._database.addPostToDatabase(post=post, fingerprint=fingerprint)
+                # if video is url, skip fingerprinting
+                if not post.video:
+                    # fingerprint the post
+                    fingerprint = self._fingerprinter.fingerprint(post.url)
+                    # update the database with post and fingerprint
+                    self._database.addPostToDatabase(post=post, fingerprint=fingerprint)
 
-                # check if the new post is too similar to an older one
-                if any(
-                    abs(fingerprint.hash - f) < self._settings["hash_threshold"]
-                    for f in old_hashes
-                ):
-                    logging.info("Skipping. Too similar to past image.")
-                    continue
-
-                # check if caption contains anything not permitted
-                if self._settings["ocr"] and fingerprint.caption:
+                    # check if the new post is too similar to an older one
                     if any(
-                        s in fingerprint.caption
-                        for s in self._settings["words_to_skip"]
+                        abs(fingerprint.hash - f) < self._settings["hash_threshold"]
+                        for f in old_hashes
                     ):
-                        logging.info("Skipping. Caption contains skippable words.")
+                        logging.info("Skipping. Too similar to past image.")
                         continue
+
+                    # check if caption contains anything not permitted
+                    if self._settings["ocr"] and fingerprint.caption:
+                        if any(
+                            s in fingerprint.caption
+                            for s in self._settings["words_to_skip"]
+                        ):
+                            logging.info("Skipping. Caption contains skippable words.")
+                            continue
+                else:
+                    post.path = self._video_downloader.downloadVideo(post.url)
+                    self._database.addPostToDatabase(post=post)
 
                 # a post has been found
                 # adds the photo to bot queue so we can use this later
@@ -255,10 +261,17 @@ class Telegram:
         # it's time to post a meme
         channel_name = self._settings["channel_name"]
         caption = self._settings["caption"]
-        new_url = self._queue.pop(0).url
+        post = self._queue.pop(0)
+        new_url = post.url
         logging.info(f"Sending image with url {new_url}.")
 
-        context.bot.send_photo(chat_id=channel_name, photo=new_url, caption=caption)
+        if not post.video:
+            context.bot.send_photo(chat_id=channel_name, photo=new_url, caption=caption)
+        else:
+            context.bot.send_video(
+                chat_id=channel_name, vide=open(post.path, "rb"), caption=caption
+            )
+            self._video_downloader.deleteVideo()
 
         logging.info("Sending memes routine completed.")
 
@@ -509,6 +522,7 @@ class Telegram:
         self._reddit = Reddit()
         self._database = Database()
         self._fingerprinter = Fingerprinter()
+        self._video_downloader = VideoDownloader()
 
         # start the bot
         self._updater = Updater(self._settings["token"], use_context=True)

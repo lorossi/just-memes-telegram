@@ -17,7 +17,7 @@ class Fingerprint(GenericData):
     hash: list
     hash_str: str
     url: str
-    timestamp: int = time()
+    timestamp: float = time()
 
     def serialize(self):
         d = asdict(self)
@@ -32,4 +32,6 @@ class Post(GenericData):
     subreddit: str = None
     title: str = None
     score: int = 0
-    timestamp: int = time()
+    timestamp: float = time()
+    video: bool = False
+    path = None
