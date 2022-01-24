@@ -1,7 +1,5 @@
-from black import re
 import ujson
 import pymongo
-import logging
 
 from time import time
 from imagehash import hex_to_hash
