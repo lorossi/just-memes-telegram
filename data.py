@@ -14,7 +14,7 @@ class GenericData:
 @dataclass
 class Fingerprint(GenericData):
     caption: str
-    hash: str
+    hash: list
     hash_str: str
     url: str
     timestamp: int = time()
