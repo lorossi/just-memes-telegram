@@ -1,12 +1,13 @@
 import os
 import sys
+import pytz
 import ujson
 import logging
 
 from time import time
 from datetime import datetime, time, timedelta
 from telegram import ParseMode, ChatAction
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.ext import Updater, CommandHandler, CallbackContext, Defaults
 
 from data import Post
 from reddit import Reddit
@@ -118,6 +119,21 @@ class Telegram:
             next_preload += seconds_between
 
         return (next_preload - now).seconds, next_preload.isoformat(sep=" ")
+
+    def _nextTimestamps(self) -> tuple[str, str]:
+        """Returns timestamps for next post and next preload
+
+        Returns:
+            tuple[str, str]
+        """
+
+        return (
+            x.next_t.replace(tzinfo=None).isoformat(sep=" ", timespec="seconds")
+            for x in [
+                self._send_memes_job,
+                self._preload_memes_job,
+            ]
+        )
 
     def _isAdmin(self, chat_id: str) -> bool:
         return chat_id in self._settings["admins"]
@@ -390,8 +406,7 @@ class Telegram:
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
-            next_preload, preload_timestamp = self._calculatePreload()
-            _, post_timestamp = self._calculateNextPost(next_preload)
+            post_timestamp, preload_timestamp = self._nextTimestamps()
             message = (
                 "_The next meme is scheduled for:_ "
                 f"{post_timestamp}.\n"
@@ -488,14 +503,13 @@ class Telegram:
                 try:
                     self._settings["posts_per_day"] = int(context.args[0])
                     self._saveSettings()
+                    self._setMemesRoutineInterval()
                 except ValueError:
                     message = "_The argument provided is not a number_"
                     context.bot.send_message(
                         chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
                     )
                     return
-
-            self._setMemesRoutineInterval()
             # notify user
             message = f"_Number of posts per day:_ {self._settings['posts_per_day']}"
         else:
@@ -536,8 +550,12 @@ class Telegram:
         self._fingerprinter = Fingerprinter()
         self._video_downloader = VideoDownloader()
 
+        # set Defaults
+        defaults = Defaults(tzinfo=pytz.timezone(self._settings["timezone"]))
         # start the bot
-        self._updater = Updater(self._settings["token"], use_context=True)
+        self._updater = Updater(
+            self._settings["token"], use_context=True, defaults=defaults
+        )
         self._dispatcher = self._updater.dispatcher
         self._jobqueue = self._updater.job_queue
 
@@ -595,8 +613,7 @@ class Telegram:
         self._updater.idle()
 
     def __str__(self) -> str:
-        next_preload, preload_timestamp = self._calculatePreload()
-        _, post_timestamp = self._calculateNextPost(next_preload)
+        post_timestamp, preload_timestamp = self._nextTimestamps()
         ocr = "enabled" if self._settings["ocr"] else "off"
         return "\n\t· ".join(
             [
