@@ -65,8 +65,10 @@ Then, the next step was preventing reposts.
 I used [ImageHash](https://pypi.org/project/ImageHash/), a wonderful little Python library, to detect similar images.
 I don't really understand how the algorithms work, but they produce a checksum that is similar with similar inputs.
 By simply evaluating the difference in the hashes of two images, it's possible to determine how similar they look.
+Sadly, this does not work with videos, that might be popular on some subreddits.
+There's no easy way to fingerprint a video, so I'll just hope that videos are rarely reposted and the text filtering will happen only in the post titles.
 
-Another step closer to the goal.
+Another step closer to the goal!
 This leaves us with only...
 
 ### Database
