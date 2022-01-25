@@ -110,7 +110,7 @@ class Reddit:
 
     @property
     def subreddits(self) -> list[str]:
-        return [r for r in self._settings["subreddits"]]
+        return sorted([r.lower() for r in self._settings["subreddits"]])
 
     @subreddits.setter
     def subreddits(self, subreddits):

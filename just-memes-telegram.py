@@ -126,7 +126,6 @@ class Telegram:
         Returns:
             tuple[str, str]
         """
-
         return (
             x.next_t.replace(tzinfo=None).isoformat(sep=" ", timespec="seconds")
             for x in [
@@ -218,7 +217,7 @@ class Telegram:
                 if p.id not in old_ids and p.url not in old_urls
             ]
 
-            logging.info(f"Looking for a post between {len(to_check)} preloaded posts.")
+            logging.info(f"Looking for a post between {len(to_check)} filtered posts.")
 
             for post in to_check:
                 # this post can get approved or rejected
@@ -409,9 +408,9 @@ class Telegram:
             post_timestamp, preload_timestamp = self._nextTimestamps()
             message = (
                 "_The next meme is scheduled for:_ "
-                f"{post_timestamp}.\n"
+                f"{post_timestamp}\n"
                 "_The next preload is scheduled for:_ "
-                f"{preload_timestamp}."
+                f"{preload_timestamp}"
             )
 
         else:
