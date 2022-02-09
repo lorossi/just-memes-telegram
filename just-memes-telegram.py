@@ -240,6 +240,11 @@ class Telegram:
                 else:
                     # fingerprint the post
                     fingerprint = self._fingerprinter.fingerprint(post.url)
+
+                    # sometimes images cannot be fingerprinted. In that case, try the next image.
+                    if not fingerprint:
+                        continue
+
                     # update the database with post and fingerprint
                     self._database.addData(fingerprint=fingerprint)
 
@@ -611,6 +616,10 @@ class Telegram:
         logging.info("Bot running.")
         self._updater.idle()
 
+    @property
+    def words_to_skip(self) -> str:
+        return "".join(sorted([s.lower() for s in self._settings["words_to_skip"]]))
+
     def __str__(self) -> str:
         post_timestamp, preload_timestamp = self._nextTimestamps()
         ocr = "enabled" if self._settings["ocr"] else "off"
@@ -624,8 +633,9 @@ class Telegram:
                 f"preload time: {self._settings['preload_time']} seconds(s)",
                 f"start delay: {self._settings['start_delay']} second(s)",
                 f"posts per day: {self._settings['posts_per_day']}",
-                f"ocr: {ocr}",
                 f"hash threshold: {self._settings['hash_threshold']}",
+                f"ocr: {ocr}",
+                f"words to skip: {self.words_to_skip}",
             ]
         )
 
