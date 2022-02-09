@@ -618,7 +618,7 @@ class Telegram:
 
     @property
     def words_to_skip(self) -> str:
-        return "".join(sorted([s.lower() for s in self._settings["words_to_skip"]]))
+        return " ".join(sorted([s.lower() for s in self._settings["words_to_skip"]]))
 
     def __str__(self) -> str:
         post_timestamp, preload_timestamp = self._nextTimestamps()
