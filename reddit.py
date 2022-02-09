@@ -109,8 +109,8 @@ class Reddit:
         return posts
 
     @property
-    def subreddits(self) -> list[str]:
-        return sorted([r.lower() for r in self._settings["subreddits"]])
+    def subreddits(self) -> str:
+        return " ".join(sorted([r.lower() for r in self._settings["subreddits"]]))
 
     @subreddits.setter
     def subreddits(self, subreddits):
