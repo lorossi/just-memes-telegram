@@ -59,10 +59,6 @@ class Reddit:
             limit=self._settings["request_limit"]
         ):
 
-            if not submission:
-                # we found nothing
-                return 0
-
             # we want to skip selftexts and stickied submission
             if submission.selftext or submission.stickied:
                 continue
@@ -92,6 +88,10 @@ class Reddit:
                 )
             )
 
+        # no posts have been found
+        if not posts:
+            return None
+
         return sorted(posts, key=lambda x: x.score, reverse=True)
 
     def fetch(self) -> list[Post]:
@@ -113,7 +113,7 @@ class Reddit:
         return " ".join(sorted([r.lower() for r in self._settings["subreddits"]]))
 
     @subreddits.setter
-    def subreddits(self, subreddits):
+    def subreddits(self, subreddits: list[str]):
         self._settings["subreddits"] = [r for r in subreddits]
         self._saveSettings()
 
@@ -122,12 +122,11 @@ class Reddit:
         return self._settings
 
     def __str__(self) -> str:
-        subreddits = " ".join(self._settings["subreddits"])
         return "\n\t· ".join(
             [
                 "Reddit:",
                 f"requests: {self._settings['request_limit']}",
-                f"subreddits: {subreddits}",
+                f"subreddits: {self.subreddits}",
                 f"videos included: {self._settings['include_videos']}",
             ]
         )
