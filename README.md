@@ -119,3 +119,5 @@ A new meme every 30 minutes!
 ## License
 
 This repo is distributed under GNU GPG 3 license.
+
+Requirements are created using [pipreqs](https://github.com/bndr/pipreqs).
