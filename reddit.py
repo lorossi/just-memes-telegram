@@ -44,7 +44,7 @@ class Reddit:
             user_agent="PC",
         )
 
-    def _loadPosts(self, include_videos: bool = False) -> list[Post]:
+    def _loadPosts(self) -> list[Post]:
         """Loads posts from reddit
 
         Returns:
@@ -72,7 +72,7 @@ class Reddit:
                 continue
 
             # skip gifs and videos if flag is set
-            if not include_videos and self._isVideo(submission.url):
+            if not self._settings["include_videos"] and self._isVideo(submission.url):
                 continue
 
             subreddit = submission.subreddit.display_name
@@ -94,14 +94,14 @@ class Reddit:
 
         return sorted(posts, key=lambda x: x.score, reverse=True)
 
-    def fetch(self, include_videos: bool = False) -> list[Post]:
+    def fetch(self) -> list[Post]:
         """
         Fetch posts from Reddit.
         Posts are returned sorted by score.
         """
         logging.info("Fetching new memes.")
 
-        posts = self._loadPosts(include_videos=include_videos)
+        posts = self._loadPosts()
 
         logging.info(f"{len(posts)} posts found.")
         logging.info("Memes fetched.")
@@ -128,5 +128,6 @@ class Reddit:
                 "Reddit:",
                 f"requests: {self._settings['request_limit']}",
                 f"subreddits: {subreddits}",
+                f"videos included: {self._settings['include_videos']}",
             ]
         )

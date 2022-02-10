@@ -3,7 +3,8 @@
     "id": "REDDIT-ID",
     "token": "REDDIT-TOKEN",
     "request_limit": 100,
-    "subreddits": ["SUBREDDITS", "LIST"]
+    "subreddits": ["SUBREDDITS", "LIST"],
+    "include_videos": true
   },
   "Fingerprinter": {
     "tesseract_path": "TESSERACT_PATH"

@@ -213,7 +213,7 @@ class Telegram:
             # filter images that match old ids or old urls
             to_check = [
                 p
-                for p in self._reddit.fetch(include_videos=True)
+                for p in self._reddit.fetch()
                 if p.id not in old_ids and p.url not in old_urls
             ]
 
