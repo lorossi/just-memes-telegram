@@ -1,3 +1,4 @@
+"""Class handling all the database operations."""
 import ujson
 import pymongo
 
@@ -7,32 +8,35 @@ from data import Post, Fingerprint
 
 
 class Database:
+    """Class to interface to MongoDB database."""
+
     def __init__(self):
+        """Initialize the database object."""
         self._settings_path = "settings/settings.json"
         self._client = None  # Pymongo client
         self._loadSettings()
         self._connect()
 
-    def _loadSettings(self):
-        """Loads settings from file"""
+    def _loadSettings(self) -> None:
+        """Load settings from file."""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Database"]
 
     def _connect(self):
-        """Creates client and connects to MongoDB database. Url is loaded from file"""
+        """Create client and connects to MongoDB database. Url is loaded from file."""
         self._client = pymongo.MongoClient(self._settings["mongodb_url"])
         self._db = self._client[self._settings["database_name"]]
 
     def _savePostData(self, post: Post):
-        """Adds Post data to database
+        """Add Post data to database.
 
         Args:
             post (Post): Post object
         """
         self._db["posts"].insert_one(post.serialize())
 
-    def _saveFingerprintData(self, fingerprint: Fingerprint):
-        """Adds Fingerprint data to database
+    def _saveFingerprintData(self, fingerprint: Fingerprint) -> None:
+        """Add Fingerprint data to database.
 
         Args:
             fingerprint (Fingerprint): Fingerprint object
@@ -40,7 +44,7 @@ class Database:
         self._db["fingerprints"].insert_one(fingerprint.serialize())
 
     def getOldIds(self) -> set[str]:
-        """Loads old ids from database, either because their relative post was discarded or posted
+        """Loadsold ids from database, either because their relative post was discarded or posted.
 
         Returns:
             set[str]: set of strings
@@ -48,7 +52,7 @@ class Database:
         return {x["id"] for x in self._db["posts"].find({}, projection=["id"])}
 
     def getOldUrls(self) -> set[str]:
-        """Loads old urls from database, either because their relative post was discarded or posted
+        """Load old urls from database, either because their relative post was discarded or posted.
 
         Returns:
             set[str]: set of strings
@@ -56,8 +60,8 @@ class Database:
         return {x["url"] for x in self._db["posts"].find({}, projection=["url"])}
 
     def getOldHashes(self) -> set[str]:
-        """Loads old hashes from database, either \
-            because their relative post was discarded or posted
+        """Load old hashes from database, either \
+            because their relative post was discarded or posted.
 
         Returns:
             set[str]: set of strings
@@ -69,8 +73,8 @@ class Database:
         }
 
     def getOldCaptions(self) -> set[str]:
-        """Loads old captions from database, either because \
-            their relative post was discarded or posted
+        """Load old captions from database, either because \
+            their relative post was discarded or posted.
 
         Returns:
             set[str]: set of strings
@@ -80,8 +84,8 @@ class Database:
             for x in self._db["fingerprints"].find({}, projection=["caption"])
         }
 
-    def addData(self, post: Post = None, fingerprint: Fingerprint = None):
-        """Adds a post (either a Post or Fingerprint) to the database
+    def addData(self, post: Post = None, fingerprint: Fingerprint = None) -> None:
+        """Add a post (either a Post or Fingerprint) to the database.
 
         Args:
             post (Post, optional): [description]. Post object
@@ -93,7 +97,7 @@ class Database:
             self._saveFingerprintData(fingerprint)
 
     def clean(self) -> tuple[int, int]:
-        """Remove old instances of documents from database
+        """Remove old instances of documents from database.
 
         Returns:
             tuple[int, int]: Number of removed posts and fingerprints
@@ -112,7 +116,7 @@ class Database:
 
     @property
     def is_connected(self) -> bool:
-        """Returns true if the client is connected to the database server
+        """Return true if the client is connected to the database server.
 
         Returns:
             bool
@@ -125,13 +129,14 @@ class Database:
 
     @property
     def mongodb_url(self) -> str:
+        """Return the url of the database server."""
         if self.is_connected:
             return self._settings["mongodb_url"]
         return None
 
     @property
     def mongodb_version(self) -> str:
-        """Returns the version of the mongodb server
+        """Return the version of the mongodb server.
 
         Returns:
             str
@@ -143,7 +148,7 @@ class Database:
 
     @property
     def stored_data(self) -> tuple[int, int]:
-        """Number of stored post and fingerprint documents in the database
+        """Return number of stored post and fingerprint documents in the database.
 
         Returns:
             tuple[int, int]: first item is stored posts, second is stored fingerprints
@@ -151,7 +156,7 @@ class Database:
         return tuple(self._db[x].count_documents({}) for x in ["posts", "fingerprints"])
 
     def __str__(self) -> str:
-
+        """Return string representation of the database object."""
         return "\n\t· ".join(
             [
                 "Database:",

@@ -1,3 +1,4 @@
+"""Class handling reddit interface."""
 import praw
 import ujson
 import logging
@@ -7,11 +8,10 @@ from data import Post
 
 
 class Reddit:
-    """
-    This class handles all the connections to Reddit, including post fetching
-    """
+    """Class handling reddit interface."""
 
     def __init__(self) -> None:
+        """Initialize the reddit object."""
         self._settings = {}
         self._settings_path = "settings/settings.json"
         self._loadSettings()
@@ -21,12 +21,12 @@ class Reddit:
         return "v.redd.it" in url
 
     def _loadSettings(self) -> None:
-        """Loads settings from file"""
+        """Load settings from file."""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Reddit"]
 
     def _saveSettings(self) -> None:
-        """Saves all settings to file"""
+        """Save all settings to file."""
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
@@ -37,7 +37,7 @@ class Reddit:
             ujson.dump(old_settings, outfile, indent=2)
 
     def _login(self) -> None:
-        """Logins into Reddit app api"""
+        """Login into Reddit app api."""
         self.reddit = praw.Reddit(
             client_id=self._settings["id"],
             client_secret=self._settings["token"],
@@ -45,7 +45,7 @@ class Reddit:
         )
 
     def _loadPosts(self) -> list[Post]:
-        """Loads posts from reddit
+        """Load posts from Reddit.
 
         Returns:
             [int]: [number of posts loaded]
@@ -95,9 +95,10 @@ class Reddit:
         return sorted(posts, key=lambda x: x.score, reverse=True)
 
     def fetch(self) -> list[Post]:
-        """
-        Fetch posts from Reddit.
-        Posts are returned sorted by score.
+        """Fetch posts from Reddit.
+
+        Returns:
+            list[Post]: list of posts
         """
         logging.info("Fetching new memes.")
 
@@ -110,6 +111,7 @@ class Reddit:
 
     @property
     def subreddits(self) -> str:
+        """Get list of subreddits."""
         return " ".join(sorted([r.lower() for r in self._settings["subreddits"]]))
 
     @subreddits.setter
@@ -119,9 +121,11 @@ class Reddit:
 
     @property
     def settings(self) -> dict:
+        """Get settings."""
         return self._settings
 
     def __str__(self) -> str:
+        """Get string representation of object."""
         return "\n\t· ".join(
             [
                 "Reddit:",

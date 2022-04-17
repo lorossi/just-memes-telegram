@@ -1,3 +1,5 @@
+"""Class handling data (Videos and Images) fingerprinting."""
+
 import ujson
 import logging
 import requests
@@ -12,17 +14,20 @@ from string import printable
 
 
 class Fingerprinter:
+    """Class handling data (Videos and Images) fingerprinting."""
+
     def __init__(self):
+        """Initialize the fingerprinter object."""
         self._settings_path = "settings/settings.json"
         self._loadSettings()
 
     def _loadSettings(self):
-        """Loads settings from file"""
+        """Load settings from file."""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Fingerprinter"]
 
     def _cleanText(self, text: str) -> str:
-        """Cleans text by removing multiple spaces and unprintable characters
+        """Clean text by removing multiple spaces and unprintable characters.
 
         Args:
             text (str)
@@ -30,7 +35,6 @@ class Fingerprinter:
         Returns:
             str
         """
-
         clean = text.strip().lower()
         to_replace = {"  ", "\n", "\t"}
         while any(r in clean for r in to_replace):
@@ -40,7 +44,7 @@ class Fingerprinter:
         return "".join([c if c in printable else "" for c in clean])
 
     def fingerprint(self, url, path=None, hash=True, ocr=True) -> Fingerprint:
-        """Fingerprints an image by providing its url
+        """Fingerprint an image by providing its url.
 
         Args:
             url (string): Image URL
@@ -84,9 +88,11 @@ class Fingerprinter:
 
     @property
     def pytesseract_version(self) -> str:
+        """Return the version of the pytesseract library."""
         return str(pytesseract.get_tesseract_version()).split("\n")[0]
 
     def __str__(self) -> str:
+        """Return string representation of the Fingerprinter object."""
         return "\n\t· ".join(
             [
                 "Fingerprinter:",

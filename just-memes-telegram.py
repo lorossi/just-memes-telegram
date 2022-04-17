@@ -1,3 +1,5 @@
+"""Main bot script."""
+
 import os
 import sys
 import pytz
@@ -16,7 +18,8 @@ from redditdownloader import RedditDownloader
 
 
 class Telegram:
-    """Class that handles all the Telegram stuff
+    """Class that handles all the Telegram stuff.
+
     BOTFATHER commands description
     start - view start message
     reset - reloads the bot
@@ -30,6 +33,7 @@ class Telegram:
     """
 
     def __init__(self):
+        """Initialize the bot. Settings are automatically loaded."""
         self._version = "2.1.0"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
@@ -42,12 +46,12 @@ class Telegram:
     # Private methods
 
     def _loadSettings(self) -> None:
-        """Loads settings from file"""
+        """Load settings from file."""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["Telegram"]
 
     def _saveSettings(self) -> None:
-        """Saves settings to file"""
+        """Save settings to file."""
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
@@ -57,18 +61,25 @@ class Telegram:
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
 
-    def _escapeMarkdown(self, str) -> str:
-        """Replaces markdown delimites with escaped ones"""
+    def _escapeMarkdown(self, raw: str) -> str:
+        """Replace markdown delimites with escaped ones.
+
+        Args:
+            raw (str): Un escaped string
+
+        Returns:
+            str: Markdown escaped string
+        """
         to_replace = ["_", "*", "[", "`"]
         for replace in to_replace:
-            str = str.replace(replace, f"\\{replace}")
-        return str
+            raw = raw.replace(replace, f"\\{replace}")
+        return raw
 
     def _secondsBetweenPosts(self) -> int:
         return int(24 * 60 * 60 / self._settings["posts_per_day"])
 
     def _calculateNextPost(self, until_preload: int = None) -> tuple[int, str]:
-        """Calculates seconds until next post and its timestamp
+        """Calculate seconds until next post and its timestamp.
 
         Args:
             until_preload (int, optional): Seconds until next preload. If None, it's recalculated.
@@ -93,7 +104,7 @@ class Telegram:
         return seconds_until, next_post.isoformat(sep=" ")
 
     def _calculatePreload(self) -> tuple[int, str]:
-        """Calculates seconds until next preload and its timestamp
+        """Calculate seconds until next preload and its timestamp.
 
         Returns:
             tuple[int, str]: seconds until next preload and its timestamp
@@ -120,10 +131,10 @@ class Telegram:
         return (next_preload - now).seconds, next_preload.isoformat(sep=" ")
 
     def _nextTimestamps(self) -> tuple[str, str]:
-        """Returns timestamps for next post and next preload
+        """Return timestamps for next post and next preload.
 
         Returns:
-            tuple[str, str]
+            tuple[str, str]: next post and next preload timestamps
         """
         return (
             x.next_t.replace(tzinfo=None).isoformat(sep=" ", timespec="seconds")
@@ -174,7 +185,7 @@ class Telegram:
     # Bot routines
 
     def _botStartupRoutine(self, context: CallbackContext) -> None:
-        """Sends a message to admins when the bot is started"""
+        """Send a message to admins when the bot is started."""
         logging.info("Starting startup routine...")
 
         message = "*Bot started!*"
@@ -186,7 +197,7 @@ class Telegram:
         logging.info("Startup routine completed.")
 
     def _botClearDatabaseRoutine(self, context: CallbackContext) -> None:
-        """Routines that handles the removal of old posts"""
+        """Routine that handles the removal of old posts."""
         logging.info("Clear database routine begins.")
 
         posts, fingerprints = self._database.clean()
@@ -198,7 +209,7 @@ class Telegram:
         logging.info("Clear database routine completed.")
 
     def _botPreloadmemeRoutine(self, _: CallbackContext) -> None:
-        """Routine that preloads memes and puts them into queue"""
+        """Routine that preloads memes and puts them into queue."""
         logging.info("Preload memes routine begins.")
         # load url from reddit
 
@@ -281,7 +292,7 @@ class Telegram:
         logging.info("Preload memes routine completed.")
 
     def _botSendmemeRoutine(self, context: CallbackContext) -> None:
-        """Routine that send memes when it's time to do so"""
+        """Routine that send memes when it's time to do so."""
         logging.info("Sending memes routine begins.")
 
         if not self._queue:
@@ -303,13 +314,12 @@ class Telegram:
                 chat_id=channel_name, photo=open(post.path, "rb"), caption=caption
             )
 
-        self._downloader.deleteMedia()
+        self._downloader.deleteTempFiles()
 
         logging.info("Sending memes routine completed.")
 
     def _botError(self, update, context) -> None:
-        """Function that sends a message to admins whenever
-        an error is raised"""
+        """Send a message to admins whenever an error is raised."""
         message = "*ERROR RAISED*"
         # admin message
         for chat_id in self._settings["admins"]:
@@ -336,7 +346,7 @@ class Telegram:
 
     # Bot commands
     def _botStartCommand(self, update, context) -> None:
-        """Function handling start command"""
+        """Start command handler."""
         chat_id = update.effective_chat.id
 
         message = (
@@ -350,7 +360,7 @@ class Telegram:
         )
 
     def _botResetCommand(self, update, context) -> None:
-        """Function handling reset command"""
+        """Reset command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
@@ -369,7 +379,7 @@ class Telegram:
             )
 
     def _botStopCommand(self, update, context) -> None:
-        """Function handling stop command"""
+        """Stop command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
@@ -387,7 +397,7 @@ class Telegram:
             )
 
     def _botStatusCommand(self, update, context) -> None:
-        """Function handling status command"""
+        """Status command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
@@ -412,7 +422,7 @@ class Telegram:
         )
 
     def _botNextpostCommand(self, update, context) -> None:
-        """Function handling nextpost command"""
+        """Nextpost command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
@@ -432,7 +442,7 @@ class Telegram:
         )
 
     def _botQueueCommand(self, update, context) -> None:
-        """Function handling queue command"""
+        """Queue command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
@@ -472,7 +482,7 @@ class Telegram:
         )
 
     def _botSubredditsCommand(self, update, context) -> None:
-        """Function handling subreddits command"""
+        """Subreddits command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
@@ -499,7 +509,7 @@ class Telegram:
         )
 
     def _botPostsperdayCommand(self, update, context) -> None:
-        """Function handling postsperday command"""
+        """Postsperday command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
@@ -530,7 +540,7 @@ class Telegram:
         )
 
     def _botCleanqueueCommand(self, update, context) -> None:
-        """Function handling cleanqueue command"""
+        """Cleanqueue command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
@@ -543,7 +553,7 @@ class Telegram:
         )
 
     def _botPingCommand(self, update, context) -> None:
-        """Function handling ping command"""
+        """Ping command handler."""
         chat_id = update.effective_chat.id
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
         message = "🏓 *PONG* 🏓"
@@ -552,8 +562,7 @@ class Telegram:
         )
 
     def start(self) -> None:
-        """Function that starts the bot in all its components"""
-
+        """Start the bot and initialize all its components."""
         # create instances
         self._reddit = Reddit()
         self._database = Database()
@@ -624,9 +633,11 @@ class Telegram:
 
     @property
     def words_to_skip(self) -> str:
+        """Return the words to skip in the posts fingerprints."""
         return " ".join(sorted([s.lower() for s in self._settings["words_to_skip"]]))
 
     def __str__(self) -> str:
+        """Return the bot's string representation."""
         post_timestamp, preload_timestamp = self._nextTimestamps()
         ocr = "enabled" if self._settings["ocr"] else "off"
         return "\n\t· ".join(
@@ -647,6 +658,7 @@ class Telegram:
 
 
 def main():
+    """Start the bot. Function automatically called whenever the script is run."""
     logging.basicConfig(
         filename=__file__.replace(".py", ".log"),
         level=logging.INFO,

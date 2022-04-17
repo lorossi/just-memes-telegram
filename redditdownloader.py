@@ -1,3 +1,5 @@
+"""Reddit Downloader class."""
+
 import ujson
 import ffmpeg
 import logging
@@ -8,12 +10,15 @@ from os import remove, path, makedirs
 
 
 class RedditDownloader:
+    """Reddit Downloader class."""
+
     def __init__(self):
+        """Initialize the class."""
         self._settings_path = "settings/settings.json"
         self._loadSettings()
 
     def _loadSettings(self) -> None:
-        """Loads settings from file"""
+        """Load settings from file."""
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["VideoDownloader"]
 
@@ -30,7 +35,7 @@ class RedditDownloader:
             makedirs(self._settings["temp_folder"])
 
     def _extractLinksFromPlaylist(self, url: str, playlist: dict) -> tuple[str, str]:
-        """Given a playlist and a base url, extracts video and audio link (if available)
+        """Extract video and audio (if available) link from playlist and base url.
 
         Args:
             url (str): Base video url
@@ -39,7 +44,6 @@ class RedditDownloader:
         Returns:
             tuple[str, str]: video stream and audio stream (if found)
         """
-
         if isinstance(playlist, list):
             # if the playlist is a list, then there's also an audio track
             video_representations = [
@@ -75,7 +79,7 @@ class RedditDownloader:
         return (video_url, audio_url)
 
     def _downloadMedia(self, url: str, dest: str) -> None:
-        """Downloads media from url
+        """Download media from url.
 
         Args:
             url (str): Source url
@@ -85,7 +89,7 @@ class RedditDownloader:
             f.write(requests.get(url).content)
 
     def _downloadVReddit(self, url: str) -> tuple[str, str]:
-        """Downloads a video from v.redd.it
+        """Download a video from v.redd.it website.
 
         Args:
             url (str): Video link
@@ -141,6 +145,14 @@ class RedditDownloader:
         return self._video_path, self._preview_path
 
     def downloadVideo(self, url: str) -> tuple[str, str]:
+        """Download video and return video path and preview path.
+
+        Args:
+            url (str): url of the video
+
+        Returns:
+            tuple[str, str]: video path and preview path
+        """
         self._createTempFolder()
 
         logging.info(f"Attempting to download video {url}.")
@@ -157,7 +169,16 @@ class RedditDownloader:
         logging.error("Url is not from v.redd.it. Aborting.")
         return None, None
 
-    def downloadImage(self, url: str) -> str:
+    def downloadImage(self, url: str) -> tuple[str, str]:
+        """Download image and return image path and preview path. \
+            Image path is the same as preview path.
+
+        Args:
+            url (str): image url
+
+        Returns:
+            tuple[str, str]: image path and preview path
+        """
         self._createTempFolder()
 
         logging.info(f"Attempting to download image {url}.")
@@ -170,7 +191,8 @@ class RedditDownloader:
             logging.info(f"Cannot download file. Error: {e}")
             return None, None
 
-    def deleteMedia(self) -> None:
+    def deleteTempFiles(self) -> None:
+        """Delete temporary files."""
         logging.info("Deleting old media.")
         for x in [
             self._audio_part_path,
@@ -187,6 +209,7 @@ class RedditDownloader:
         logging.info("Deletion completed.")
 
     def __str__(self) -> str:
+        """Return string representation of object."""
         return "\n\t· ".join(
             [
                 "VideoDownloader:",
