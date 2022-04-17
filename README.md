@@ -47,7 +47,7 @@ After many experiments I think I found the perfect mix.
 
 ### Memes filtering
 
-If you are an habitual Reddit user, you will know that some memes are either auto-referential (in the likes of *"Reddit good! Instagram bad!"*) or make sense only in the context of the website (like *"Read the tile* or sporadic references to a certain user and its karma).
+If you are an habitual Reddit user, you will know that some memes are either auto-referential (in the likes of *"Reddit good! Instagram bad!"*) or make sense only in the context of the website (like *"Read the tile"* or sporadic references to a certain user and its karma).
 Furthermore, you will also find that there are *a lot of reposts*.
 
 In order to filter out the unwanted memes, I initially started to remove submissions whose titles contain some *"skip words"* like, for example, *"karma"* and *"upvote"* (among terms that make sense only inside Reddit itself).
@@ -90,7 +90,7 @@ Then, started I looking into the various database paradigms. SQL or NoSQL?
 SQL would probably have made more sense, but since the data is very little and already in a structure that is similar to something that can be represented via JSON, the choice fell on the latter.
 I have worked with MongoDB before, so it didn't take long to choose the DBMS.
 
-It wasn't hard to convert all the code, since the data I am saving can be easily converted into JSON.
+Honestly, it wasn't hard to convert all the code.
 By making use of the new Python 3 `dataclass` classes, the jump into the "future" *(MongoDB came out in 2009, so what?)* was nothing more than a couple of hours *(and about 150 commits)* away.
 
 #### Installing MongoDB
