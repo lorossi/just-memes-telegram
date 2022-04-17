@@ -34,7 +34,7 @@ class Telegram:
 
     def __init__(self):
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.0"  # current bot version
+        self._version = "2.1.1"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -303,13 +303,14 @@ class Telegram:
         channel_name = self._settings["channel_name"]
         caption = self._settings["caption"]
         post = self._queue.pop(0)
-        logging.info(f"Sending image with url {post.url}. Path: {post.path}")
 
         if post.video:
+            logging.info(f"Sending video with url {post.url}. Path: {post.path}")
             context.bot.send_video(
                 chat_id=channel_name, video=open(post.path, "rb"), caption=caption
             )
         else:
+            logging.info(f"Sending image with url {post.url}. Path: {post.path}")
             context.bot.send_photo(
                 chat_id=channel_name, photo=open(post.path, "rb"), caption=caption
             )
@@ -460,9 +461,32 @@ class Telegram:
             else:
                 for url in context.args:
                     # an url been passed
+                    is_video = "v.redd.it" in url
                     # fingerprint it and add it to database
-                    post = Post(url=url, timestamp=datetime.now().isoformat())
-                    fingerprint = self._fingerprinter.fingerprint(post)
+                    post = Post(
+                        url=url, timestamp=datetime.now().isoformat(), video=is_video
+                    )
+
+                    if is_video:
+                        post_path, preview_path = self._downloader.downloadVideo(
+                            post.url
+                        )
+                    else:
+                        post_path, preview_path = self._downloader.downloadImage(
+                            post.url
+                        )
+
+                    fingerprint = self._fingerprinter.fingerprint(
+                        path=preview_path, url=post.url
+                    )
+
+                    # sometimes images cannot be fingerprinted. In that case, try the next image.
+                    if not fingerprint:
+                        continue
+
+                    # save the path of the file
+                    post.path = post_path
+
                     self._database.addData(post=post, fingerprint=fingerprint)
                     # add it to queue
                     self._queue.append(post)

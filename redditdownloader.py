@@ -122,8 +122,8 @@ class RedditDownloader:
             try:
                 ffmpeg.concat(input_video, input_audio, v=1, a=1).output(
                     self._video_path
-                ).run(quiet=True).overwrite_output()
-            except Exception as e:
+                ).overwrite_output().run(quiet=True)
+            except ffmpeg.Error as e:
                 logging.error(f"Error while concatenating video. Error: {e}")
                 return
 
@@ -137,8 +137,8 @@ class RedditDownloader:
             logging.info("Extracting first frame")
             ffmpeg.input(self._video_path, ss=0).output(
                 self._preview_path, vframes=1
-            ).run(quiet=True).overwrite_output()
-        except Exception as e:
+            ).overwrite_output().run(quiet=True)
+        except ffmpeg.Error as e:
             logging.error(f"Error while extracting first frame. Error: {e}")
             return
 
