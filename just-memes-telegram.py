@@ -4,8 +4,7 @@ import pytz
 import ujson
 import logging
 
-from time import time
-from datetime import datetime, time, timedelta
+from datetime import time, datetime, timedelta
 from telegram import ParseMode, ChatAction
 from telegram.ext import Updater, CommandHandler, CallbackContext, Defaults
 
@@ -13,7 +12,7 @@ from data import Post
 from reddit import Reddit
 from database import Database
 from fingerprinter import Fingerprinter
-from videodownloader import VideoDownloader
+from redditdownloader import RedditDownloader
 
 
 class Telegram:
@@ -31,7 +30,7 @@ class Telegram:
     """
 
     def __init__(self):
-        self._version = "2.0.0"  # current bot version
+        self._version = "2.1.0"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -230,47 +229,52 @@ class Telegram:
                     # update database
                     continue
 
-                # if video is url, skip fingerprinting
+                # download the media
                 if post.video:
-                    path = self._video_downloader.downloadVideo(post.url)
-                    if path:
-                        post.path = path
-                    else:
-                        continue
+                    post_path, preview_path = self._downloader.downloadVideo(post.url)
                 else:
-                    # fingerprint the post
-                    fingerprint = self._fingerprinter.fingerprint(post.url)
+                    post_path, preview_path = self._downloader.downloadImage(post.url)
 
-                    # sometimes images cannot be fingerprinted. In that case, try the next image.
-                    if not fingerprint:
-                        continue
+                if not post_path:
+                    continue
 
-                    # update the database with post and fingerprint
-                    self._database.addData(fingerprint=fingerprint)
+                fingerprint = self._fingerprinter.fingerprint(
+                    path=preview_path, url=post.url
+                )
 
-                    # check if the new post is too similar to an older one
+                # sometimes images cannot be fingerprinted. In that case, try the next image.
+                if not fingerprint:
+                    continue
+
+                # save the path of the file
+                post.path = post_path
+
+                # update the database with post and fingerprint
+                self._database.addData(fingerprint=fingerprint)
+
+                # check if the new post is too similar to an older one
+                if any(
+                    abs(fingerprint.hash - f) < self._settings["hash_threshold"]
+                    for f in old_hashes
+                ):
+                    logging.info("Skipping. Too similar to past image.")
+                    continue
+
+                # check if caption contains anything not permitted
+                if self._settings["ocr"] and fingerprint.caption:
                     if any(
-                        abs(fingerprint.hash - f) < self._settings["hash_threshold"]
-                        for f in old_hashes
+                        s in fingerprint.caption
+                        for s in self._settings["words_to_skip"]
                     ):
-                        logging.info("Skipping. Too similar to past image.")
+                        logging.info("Skipping. Caption contains skippable words.")
                         continue
-
-                    # check if caption contains anything not permitted
-                    if self._settings["ocr"] and fingerprint.caption:
-                        if any(
-                            s in fingerprint.caption
-                            for s in self._settings["words_to_skip"]
-                        ):
-                            logging.info("Skipping. Caption contains skippable words.")
-                            continue
 
                 # a post has been found
                 # adds the photo to bot queue so we can use this later
                 self._queue.append(post)
                 break
 
-            logging.info(f"Posts found. Post url: {self._queue[-1].url}.")
+            logging.info(f"Post found. URL: {self._queue[-1].url}.")
         else:
             logging.info(f"Post already in queue.. Post url: {self._queue[-1].url}.")
 
@@ -288,16 +292,18 @@ class Telegram:
         channel_name = self._settings["channel_name"]
         caption = self._settings["caption"]
         post = self._queue.pop(0)
-        new_url = post.url
-        logging.info(f"Sending image with url {new_url}.")
+        logging.info(f"Sending image with url {post.url}. Path: {post.path}")
 
-        if not post.video:
-            context.bot.send_photo(chat_id=channel_name, photo=new_url, caption=caption)
-        else:
+        if post.video:
             context.bot.send_video(
                 chat_id=channel_name, video=open(post.path, "rb"), caption=caption
             )
-            self._video_downloader.deleteVideo()
+        else:
+            context.bot.send_photo(
+                chat_id=channel_name, photo=open(post.path, "rb"), caption=caption
+            )
+
+        self._downloader.deleteMedia()
 
         logging.info("Sending memes routine completed.")
 
@@ -393,7 +399,7 @@ class Telegram:
                         self._reddit,
                         self._database,
                         self._fingerprinter,
-                        self._video_downloader,
+                        self._downloader,
                     ]
                 ]
             )
@@ -445,7 +451,7 @@ class Telegram:
                 for url in context.args:
                     # an url been passed
                     # fingerprint it and add it to database
-                    post = Post(url=url, timestamp=time())
+                    post = Post(url=url, timestamp=datetime.now().isoformat())
                     fingerprint = self._fingerprinter.fingerprint(post)
                     self._database.addData(post=post, fingerprint=fingerprint)
                     # add it to queue
@@ -552,7 +558,7 @@ class Telegram:
         self._reddit = Reddit()
         self._database = Database()
         self._fingerprinter = Fingerprinter()
-        self._video_downloader = VideoDownloader()
+        self._downloader = RedditDownloader()
 
         # set Defaults
         defaults = Defaults(tzinfo=pytz.timezone(self._settings["timezone"]))
@@ -625,7 +631,7 @@ class Telegram:
         ocr = "enabled" if self._settings["ocr"] else "off"
         return "\n\t· ".join(
             [
-                f"Telegram Bot:",
+                "Telegram Bot:",
                 f"version: {self._version}",
                 f"queue size: {len(self._queue)}",
                 f"next post scheduled for: {post_timestamp}",

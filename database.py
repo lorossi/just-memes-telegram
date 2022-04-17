@@ -56,7 +56,8 @@ class Database:
         return {x["url"] for x in self._db["posts"].find({}, projection=["url"])}
 
     def getOldHashes(self) -> set[str]:
-        """Loads old hashes from database, either because their relative post was discarded or posted
+        """Loads old hashes from database, either \
+            because their relative post was discarded or posted
 
         Returns:
             set[str]: set of strings
@@ -68,7 +69,8 @@ class Database:
         }
 
     def getOldCaptions(self) -> set[str]:
-        """Loads old captions from database, either because their relative post was discarded or posted
+        """Loads old captions from database, either because \
+            their relative post was discarded or posted
 
         Returns:
             set[str]: set of strings
@@ -157,6 +159,7 @@ class Database:
                 f"MongoDB version: {self.mongodb_version}",
                 f"MongoDB url: {self.mongodb_url}",
                 f"max days: {self._settings['max_days']}",
-                f"stored posts and fingerprints in database: {', '.join(str(x) for x in self.stored_data)}",
+                "stored posts and fingerprints in database: ",
+                f"{', '.join(str(x) for x in self.stored_data)}",
             ]
         )

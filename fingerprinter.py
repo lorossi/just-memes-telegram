@@ -39,11 +39,12 @@ class Fingerprinter:
 
         return "".join([c if c in printable else "" for c in clean])
 
-    def fingerprint(self, url, hash=True, ocr=True) -> Fingerprint:
+    def fingerprint(self, url, path=None, hash=True, ocr=True) -> Fingerprint:
         """Fingerprints an image by providing its url
 
         Args:
             url (string): Image URL
+            path (string, optional): Image path
             hash (bool, optional): Should the image be hashed?
             ocr (bool, optional): Should the image be scanned with OCR?
 
@@ -52,12 +53,17 @@ class Fingerprinter:
         """
         timestamp = time()
         try:
-            logging.info(f"Attempting to fingerprint image with url: {url}.")
-            r = requests.get(url, stream=True)
-            # handle spurious Content-Encoding
-            r.raw.decode_content = True
-            # Open it in PIL
-            im = Image.open(r.raw)
+            if not path:
+                logging.info(f"Attempting to download image with url: {url}.")
+                r = requests.get(url, stream=True)
+                # handle spurious Content-Encoding
+                r.raw.decode_content = True
+                im = Image.open(r.raw)
+            else:
+                logging.info(f"Attempting to fingerprint image with path: {path}.")
+                # Open it in PIL
+                im = Image.open(path)
+
             # Hash it
             hash = imagehash.phash(im) if hash else None
             # OCR it
@@ -71,6 +77,8 @@ class Fingerprinter:
         except Exception as e:
             logging.error(f"While fingerprinting. Error: {e}.")
             return None
+
+        logging.info("Fingerprinting complete.")
 
         return Fingerprint(caption, hash, str(hash), url, timestamp)
 

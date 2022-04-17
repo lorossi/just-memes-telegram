@@ -7,7 +7,7 @@ import xmltodict
 from os import remove, path, makedirs
 
 
-class VideoDownloader:
+class RedditDownloader:
     def __init__(self):
         self._settings_path = "settings/settings.json"
         self._loadSettings()
@@ -17,9 +17,17 @@ class VideoDownloader:
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["VideoDownloader"]
 
-        self._output_path = self._settings["temp_folder"] + "/complete.mp4"
-        self._audio_path = self._settings["temp_folder"] + "/audio.mp4"
-        self._video_path = self._settings["temp_folder"] + "/video.mp4"
+        self._audio_part_path = self._settings["temp_folder"] + "/audio.mp4"
+        self._video_part_path = self._settings["temp_folder"] + "/video.mp4"
+        self._preview_path = self._settings["temp_folder"] + "/preview.png"
+
+        self._video_path = self._settings["temp_folder"] + "/complete.mp4"
+        self._image_path = self._settings["temp_folder"] + "/complete.png"
+
+    def _createTempFolder(self) -> None:
+        if not path.exists(self._settings["temp_folder"]):
+            logging.info("Creating folder.")
+            makedirs(self._settings["temp_folder"])
 
     def _extractLinksFromPlaylist(self, url: str, playlist: dict) -> tuple[str, str]:
         """Given a playlist and a base url, extracts video and audio link (if available)
@@ -76,7 +84,7 @@ class VideoDownloader:
         with open(dest, "wb") as f:
             f.write(requests.get(url).content)
 
-    def _downloadVReddit(self, url: str) -> str:
+    def _downloadVReddit(self, url: str) -> tuple[str, str]:
         """Downloads a video from v.redd.it
 
         Args:
@@ -99,54 +107,78 @@ class VideoDownloader:
         if audio_url:
             logging.info("Downloading audio and video separately.")
 
-            self._downloadMedia(audio_url, self._audio_path)
-            self._downloadMedia(video_url, self._video_path)
+            self._downloadMedia(audio_url, self._audio_part_path)
+            self._downloadMedia(video_url, self._video_part_path)
 
-            input_audio = ffmpeg.input(self._audio_path)
-            input_video = ffmpeg.input(self._video_path)
+            input_audio = ffmpeg.input(self._audio_part_path)
+            input_video = ffmpeg.input(self._video_part_path)
 
             logging.info("Concatenating audio and video.")
-            ffmpeg.concat(input_video, input_audio, v=1, a=1).output(
-                self._output_path
-            ).run(quiet=True, input=b"y")
+
+            try:
+                ffmpeg.concat(input_video, input_audio, v=1, a=1).output(
+                    self._video_path
+                ).run(quiet=True, input=b"y")
+            except ffmpeg.Error:
+                logging.error("Error while concatenating video.")
+                return
 
         else:
             logging.info("Downloading video.")
             # no audio
-            self._downloadMedia(video_url, self._output_path)
+            self._downloadMedia(video_url, self._video_path)
 
-        return self._output_path
+        # extract first frame
+        try:
+            logging.info("Extracting first frame")
+            ffmpeg.input(self._video_path, ss=0).output(
+                self._preview_path, vframes=1
+            ).run(quiet=True, input=b"y")
+        except ffmpeg.Error:
+            logging.error("Error while extracting first frame.")
+            return
 
-    def downloadVideo(self, url: str) -> str:
-        """Downloads a video from internet
+        return self._video_path, self._preview_path
 
-        Args:
-            url (str): video url
-
-        Returns:
-            str: local video path
-        """
-        if not path.exists(self._settings["temp_folder"]):
-            logging.info("Creating folder.")
-            makedirs(self._settings["temp_folder"])
+    def downloadVideo(self, url: str) -> tuple[str, str]:
+        self._createTempFolder()
 
         logging.info(f"Attempting to download video {url}.")
 
         if "v.redd.it" in url:
             if self._downloadVReddit(url):
-                logging.info(f"Downloading complete. Path: {self._output_path}.")
-                return self._output_path
+                logging.info(f"Downloading complete. Path: {self._video_path}.")
+                return self._video_path, self._preview_path
 
             logging.error("Cannot download. Aborting")
-            return None
-        else:
-            # gif download is not yet implemented
-            logging.error("Url is not from v.redd.it. Aborting.")
-            return None
+            return None, None
 
-    def deleteVideo(self) -> None:
-        logging.info("Deleting old video.")
-        for x in [self._output_path, self._audio_path, self._video_path]:
+        # gif download is not yet implemented
+        logging.error("Url is not from v.redd.it. Aborting.")
+        return None, None
+
+    def downloadImage(self, url: str) -> str:
+        self._createTempFolder()
+
+        logging.info(f"Attempting to download image {url}.")
+
+        try:
+            self._downloadMedia(url, self._image_path)
+            logging.info(f"Downloading complete. Path: {self._image_path}.")
+            return self._image_path, self._image_path
+        except Exception as e:
+            logging.info(f"Cannot download file. Error: {e}")
+            return None, None
+
+    def deleteMedia(self) -> None:
+        logging.info("Deleting old media.")
+        for x in [
+            self._audio_part_path,
+            self._video_part_path,
+            self._preview_path,
+            self._video_path,
+            self._image_path,
+        ]:
             try:
                 remove(x)
             except FileNotFoundError:
