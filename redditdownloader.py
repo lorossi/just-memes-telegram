@@ -85,7 +85,7 @@ class VideoDownloader:
         Returns:
             str: downloaded file path
         """
-        logging.info(f"Loading playlist.")
+        logging.info("Loading playlist.")
 
         r = requests.get(url + "/DASHPlaylist.mpd")
 
