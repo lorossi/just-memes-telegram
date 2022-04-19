@@ -34,7 +34,7 @@ class Telegram:
 
     def __init__(self):
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.1"  # current bot version
+        self._version = "2.1.1.1"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -75,7 +75,7 @@ class Telegram:
             raw = raw.replace(replace, f"\\{replace}")
         return raw
 
-    def _secondsBetweenPosts(self) -> int:
+    def _getSecondsBetweenPosts(self) -> int:
         return int(24 * 60 * 60 / self._settings["posts_per_day"])
 
     def _calculateNextPost(self, until_preload: int = None) -> tuple[int, str]:
@@ -113,7 +113,7 @@ class Telegram:
         preload_time = timedelta(seconds=self._settings["preload_time"])
         # convert firest post into timedelta
         # convert second between posts into timedelta
-        seconds_between = timedelta(seconds=self._secondsBetweenPosts())
+        seconds_between = timedelta(seconds=self._getSecondsBetweenPosts())
         # convert start delay into timedelta
         delay_minutes = timedelta(seconds=self._settings["start_delay"])
         # remove seconds and microseconds from now
@@ -130,7 +130,7 @@ class Telegram:
 
         return (next_preload - now).seconds, next_preload.isoformat(sep=" ")
 
-    def _nextTimestamps(self) -> tuple[str, str]:
+    def _getNextTimestamps(self) -> tuple[str, str]:
         """Return timestamps for next post and next preload.
 
         Returns:
@@ -151,10 +151,9 @@ class Telegram:
         """Create routine to send memes."""
         until_preload, _ = self._calculatePreload()
         until_first, _ = self._calculateNextPost(until_preload)
-        seconds_between = self._secondsBetweenPosts()
+        seconds_between = self._getSecondsBetweenPosts()
         # we remove already started jobs from the schedule
-        # (this happens when we change the number of posts per day or
-        # the preload time)
+        # (this happens when we change the number of posts per day)
 
         # first take care of send memes job
         # remove the old job, if already set
@@ -425,7 +424,7 @@ class Telegram:
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
-            post_timestamp, preload_timestamp = self._nextTimestamps()
+            post_timestamp, preload_timestamp = self._getNextTimestamps()
             message = (
                 "_The next meme is scheduled for:_ "
                 f"{post_timestamp}\n"
@@ -459,11 +458,11 @@ class Telegram:
             else:
                 image_count = 0
                 for url in context.args:
-                    # an url been passed
-                    is_video = self._downloader.isVideo(url)
                     # fingerprint it and add it to database
                     post = Post(
-                        url=url, timestamp=datetime.now().isoformat(), video=is_video
+                        url=url,
+                        timestamp=datetime.now().isoformat(),
+                        video=self._downloader.isVideo(url),
                     )
 
                     post_path, preview_path = self._downloader.downloadMedia(post.url)
@@ -662,7 +661,7 @@ class Telegram:
 
     def __str__(self) -> str:
         """Return the bot's string representation."""
-        post_timestamp, preload_timestamp = self._nextTimestamps()
+        post_timestamp, preload_timestamp = self._getNextTimestamps()
         ocr = "enabled" if self._settings["ocr"] else "off"
         return "\n\t· ".join(
             [
