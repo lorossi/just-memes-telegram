@@ -105,7 +105,6 @@ class Reddit:
         posts = self._loadPosts()
 
         logging.info(f"{len(posts)} posts found.")
-        logging.info("Memes fetched.")
 
         return posts
 

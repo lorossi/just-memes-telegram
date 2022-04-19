@@ -1,5 +1,6 @@
 """Reddit Downloader class."""
 
+from xmlrpc.client import Boolean
 import ujson
 import ffmpeg
 import logging
@@ -9,7 +10,7 @@ import xmltodict
 from os import remove, path, makedirs
 
 
-class RedditDownloader:
+class MediaDownloader:
     """Reddit Downloader class."""
 
     def __init__(self):
@@ -22,6 +23,8 @@ class RedditDownloader:
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["VideoDownloader"]
 
+        self._image_extensions = [".jpg", ".jpeg", ".png"]
+        self._video_extensions = ["v.redd.it"]
         self._audio_part_path = self._settings["temp_folder"] + "/audio.mp4"
         self._video_part_path = self._settings["temp_folder"] + "/video.mp4"
         self._preview_path = self._settings["temp_folder"] + "/preview.png"
@@ -78,24 +81,32 @@ class RedditDownloader:
 
         return (video_url, audio_url)
 
-    def _downloadMedia(self, url: str, dest: str) -> None:
-        """Download media from url.
+    def _downloadContent(self, url: str, dest: str) -> bool:
+        """Download content from url.
 
         Args:
-            url (str): Source url
-            dest (str): File destination
-        """
-        with open(dest, "wb") as f:
-            f.write(requests.get(url).content)
+            url (str): content source URL
+            dest (str): destination path
 
-    def _downloadVReddit(self, url: str) -> tuple[str, str]:
+        Returns:
+            bool: success
+        """
+        try:
+            with open(dest, "wb") as f:
+                f.write(requests.get(url).content)
+                return True
+        except Exception as e:
+            logging.error(f"Error while downloading media. Error: {e}.")
+            return False
+
+    def _downloadVReddit(self, url: str) -> bool:
         """Download a video from v.redd.it website.
 
         Args:
             url (str): Video link
 
         Returns:
-            str: downloaded file path
+            bool: success of download
         """
         logging.info("Loading playlist.")
 
@@ -105,32 +116,35 @@ class RedditDownloader:
         if r.status_code != 200:
             return
 
+        # load playlist
         playlist = xmltodict.parse(r.content)["MPD"]["Period"]["AdaptationSet"]
         video_url, audio_url = self._extractLinksFromPlaylist(url, playlist)
 
         if audio_url:
+            # audio was found, download it separately from video
             logging.info("Downloading audio and video separately.")
 
-            self._downloadMedia(audio_url, self._audio_part_path)
-            self._downloadMedia(video_url, self._video_part_path)
+            self._downloadContent(audio_url, self._audio_part_path)
+            self._downloadContent(video_url, self._video_part_path)
 
             input_audio = ffmpeg.input(self._audio_part_path)
             input_video = ffmpeg.input(self._video_part_path)
 
             logging.info("Concatenating audio and video.")
 
+            # concatenate audio and video together using FFMPEG
             try:
                 ffmpeg.concat(input_video, input_audio, v=1, a=1).output(
                     self._video_path
                 ).overwrite_output().run(quiet=True)
             except Exception as e:
                 logging.error(f"Error while concatenating video. Error: {e}")
-                return None, None
+                return False
 
         else:
             logging.info("Downloading video.")
             # no audio
-            self._downloadMedia(video_url, self._video_path)
+            self._downloadContent(video_url, self._video_path)
 
         # extract first frame
         try:
@@ -140,56 +154,37 @@ class RedditDownloader:
             ).overwrite_output().run(quiet=True)
         except Exception as e:
             logging.error(f"Error while extracting first frame. Error: {e}")
-            return None, None
+            return False
 
-        return self._video_path, self._preview_path
+        return True
 
-    def downloadVideo(self, url: str) -> tuple[str, str]:
-        """Download video and return video path and preview path.
+    def downloadMedia(self, url: str) -> tuple[str, str]:
+        """Download a media (either a video from v.redd.it, an image or a gif).
 
         Args:
-            url (str): url of the video
+            url (str): media URL
 
         Returns:
-            tuple[str, str]: video path and preview path
+            tuple[str, str]: path of the downloaded media and its preview. \
+                If the media is a video, the preview is the first frame of the video. \
+                If the media is an image, the preview is the image itself. \
         """
         self._createTempFolder()
 
-        logging.info(f"Attempting to download video {url}.")
+        logging.info(f"Attempting to download media from {url}.")
 
-        if "v.redd.it" in url:
+        if any(ext in url for ext in self._video_extensions):
             if self._downloadVReddit(url):
                 logging.info(f"Downloading complete. Path: {self._video_path}.")
                 return self._video_path, self._preview_path
 
-            logging.error("Cannot download. Aborting")
-            return None, None
+        if any(ext in url for ext in self._image_extensions):
+            if self._downloadContent(url, self._image_path):
+                logging.info(f"Downloading complete. Path: {self._image_path}.")
+                return self._image_path, self._image_path
 
-        # gif download is not yet implemented
-        logging.error("Url is not from v.redd.it. Aborting.")
+        logging.error("Cannot download. Aborting")
         return None, None
-
-    def downloadImage(self, url: str) -> tuple[str, str]:
-        """Download image and return image path and preview path. \
-            Image path is the same as preview path.
-
-        Args:
-            url (str): image url
-
-        Returns:
-            tuple[str, str]: image path and preview path
-        """
-        self._createTempFolder()
-
-        logging.info(f"Attempting to download image {url}.")
-
-        try:
-            self._downloadMedia(url, self._image_path)
-            logging.info(f"Downloading complete. Path: {self._image_path}.")
-            return self._image_path, self._image_path
-        except Exception as e:
-            logging.info(f"Cannot download file. Error: {e}")
-            return None, None
 
     def deleteTempFiles(self) -> None:
         """Delete temporary files."""
@@ -214,5 +209,18 @@ class RedditDownloader:
             [
                 "VideoDownloader:",
                 f"temp folder: {self._settings['temp_folder']}",
+                f"video extensions: {self._video_extensions}",
+                f"image extensions: {self._image_extensions}",
             ]
         )
+
+    def isVideo(self, url: str) -> bool:
+        """Check if the given URL is a video.
+
+        Args:
+            url (str): URL to check
+
+        Returns:
+            bool
+        """
+        return any(ext in url for ext in self._video_extensions)

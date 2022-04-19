@@ -14,7 +14,7 @@ from data import Post
 from reddit import Reddit
 from database import Database
 from fingerprinter import Fingerprinter
-from redditdownloader import RedditDownloader
+from mediadownloader import MediaDownloader
 
 
 class Telegram:
@@ -196,7 +196,7 @@ class Telegram:
 
         logging.info("Startup routine completed.")
 
-    def _botClearDatabaseRoutine(self, context: CallbackContext) -> None:
+    def _botClearDatabaseRoutine(self, _: CallbackContext) -> None:
         """Routine that handles the removal of old posts."""
         logging.info("Clear database routine begins.")
 
@@ -240,15 +240,13 @@ class Telegram:
                     # update database
                     continue
 
-                # download the media
-                if post.video:
-                    post_path, preview_path = self._downloader.downloadVideo(post.url)
-                else:
-                    post_path, preview_path = self._downloader.downloadImage(post.url)
-
+                # first of all, download the media
+                post_path, preview_path = self._downloader.downloadMedia(post.url)
+                # no path = the download failed, continue
                 if not post_path:
                     continue
 
+                # fingerprint the post
                 fingerprint = self._fingerprinter.fingerprint(
                     path=preview_path, url=post.url
                 )
@@ -305,12 +303,12 @@ class Telegram:
         post = self._queue.pop(0)
 
         if post.video:
-            logging.info(f"Sending video with url {post.url}. Path: {post.path}")
+            logging.info(f"Sending video with path: {post.path}")
             context.bot.send_video(
                 chat_id=channel_name, video=open(post.path, "rb"), caption=caption
             )
         else:
-            logging.info(f"Sending image with url {post.url}. Path: {post.path}")
+            logging.info(f"Sending image with path: {post.path}")
             context.bot.send_photo(
                 chat_id=channel_name, photo=open(post.path, "rb"), caption=caption
             )
@@ -459,22 +457,19 @@ class Telegram:
                         "_Pass the links as argument to set them_"
                     )
             else:
+                image_count = 0
                 for url in context.args:
                     # an url been passed
-                    is_video = "v.redd.it" in url
+                    is_video = self._downloader.isVideo(url)
                     # fingerprint it and add it to database
                     post = Post(
                         url=url, timestamp=datetime.now().isoformat(), video=is_video
                     )
 
-                    if is_video:
-                        post_path, preview_path = self._downloader.downloadVideo(
-                            post.url
-                        )
-                    else:
-                        post_path, preview_path = self._downloader.downloadImage(
-                            post.url
-                        )
+                    post_path, preview_path = self._downloader.downloadMedia(post.url)
+
+                    if not post_path:
+                        continue
 
                     fingerprint = self._fingerprinter.fingerprint(
                         path=preview_path, url=post.url
@@ -490,9 +485,14 @@ class Telegram:
                     self._database.addData(post=post, fingerprint=fingerprint)
                     # add it to queue
                     self._queue.append(post)
+                    # count as added
+                    image_count += 1
+
+                # wacky english
+                plural = "s" if image_count > 1 else ""
 
                 message = (
-                    "_Image(s) added to queue_\n"
+                    f"{image_count} _Image{plural} added to queue_\n"
                     "_Use /queue to check the current queue_"
                 )
         else:
@@ -591,7 +591,7 @@ class Telegram:
         self._reddit = Reddit()
         self._database = Database()
         self._fingerprinter = Fingerprinter()
-        self._downloader = RedditDownloader()
+        self._downloader = MediaDownloader()
 
         # set Defaults
         defaults = Defaults(tzinfo=pytz.timezone(self._settings["timezone"]))
