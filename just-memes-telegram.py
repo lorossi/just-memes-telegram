@@ -5,6 +5,7 @@ import sys
 import pytz
 import ujson
 import logging
+import requests
 
 from datetime import time, datetime, timedelta
 from telegram import ParseMode, ChatAction
@@ -32,7 +33,7 @@ class Telegram:
 
     def __init__(self):
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.1.2"  # current bot version
+        self._version = "2.1.2"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -145,6 +146,16 @@ class Telegram:
     def _isAdmin(self, chat_id: str) -> bool:
         return chat_id in self._settings["admins"]
 
+    def _getFileSize(self, url) -> float:
+        try:
+            s = requests.get(url, stream=True, allow_redirects=True).headers[
+                "Content-length"
+            ]
+            return int(s) / (1024 * 1024)
+        except Exception as e:
+            logging.error(f"Error while getting file size: {e}")
+            return -1
+
     def _setMemesRoutineInterval(self) -> None:
         """Create routine to send memes."""
         until_preload, _ = self._calculatePreload()
@@ -227,6 +238,7 @@ class Telegram:
             logging.info(f"Looking for a post between {len(to_check)} filtered posts.")
 
             for post in to_check:
+                logging.info(f"Checking post with url {post.url}.")
                 # this post can get approved or rejected
                 # either way, it should not be scanned again
                 self._database.addData(post=post)
@@ -236,6 +248,21 @@ class Telegram:
                     logging.info("Skipping. Title contains skippable words.")
                     # update database
                     continue
+
+                # check if file is too big
+                if ".gif" in post.url:
+                    file_size = self._getFileSize(post.url)
+                    if file_size > self._settings["max_gif_size"]:
+                        logging.info(
+                            f"Skipping. File is too big. Size: {int(file_size)} MB"
+                        )
+                        continue
+
+                    if file_size <= 0:
+                        logging.info(
+                            f"Skipping. Cannot get file size. Error code: {file_size}"
+                        )
+                        continue
 
                 # first of all, download the media
                 post_path, preview_path = self._downloader.downloadMedia(post.url)
@@ -280,9 +307,13 @@ class Telegram:
                 self._queue.append(post)
                 break
 
-            logging.info(f"Post found. URL: {self._queue[-1].url}.")
+            logging.info(
+                f"Post found: url: {self._queue[-1].url}, path: {self._queue[-1].path}."
+            )
         else:
-            logging.info(f"Post already in queue.. Post url: {self._queue[-1].url}.")
+            logging.info(
+                f"Post already in queue: url: {self._queue[-1].url}, path: {self._queue[-1].path}."
+            )
 
         logging.info("Preload memes routine completed.")
 
@@ -532,6 +563,9 @@ class Telegram:
         self._fingerprinter = Fingerprinter()
         self._downloader = MediaDownloader()
 
+        # clear temp folder in downloader
+        self._downloader.cleanTempFolder()
+
         # set Defaults
         defaults = Defaults(tzinfo=pytz.timezone(self._settings["timezone"]))
         # start the bot
@@ -606,6 +640,7 @@ class Telegram:
                 f"start delay: {self._settings['start_delay']} second(s)",
                 f"posts per day: {self._settings['posts_per_day']}",
                 f"hash threshold: {self._settings['hash_threshold']}",
+                f"max gif size: {self._settings['max_gif_size']}",
                 f"ocr: {ocr}",
                 f"words to skip: {self.words_to_skip}",
             ]

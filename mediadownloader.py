@@ -7,7 +7,7 @@ import requests
 import xmltodict
 
 from time import time
-from os import remove, path, makedirs
+from os import remove, path, makedirs, listdir, path
 
 
 class MediaDownloader:
@@ -23,9 +23,11 @@ class MediaDownloader:
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["VideoDownloader"]
 
-        self._image_extensions = [".jpg", ".jpeg", ".png"]
+        self._gif_extensions = [".gif"]
         self._video_extensions = ["v.redd.it"]
-        self._download_folder = self._settings["temp_folder"]
+        self._image_extensions = [".jpg", ".jpeg", ".png"]
+
+        self._temp_folder = self._settings["temp_folder"]
         self._preview_path = self._settings["temp_folder"] + "/preview.png"
 
     def _createTempFolder(self) -> None:
@@ -34,18 +36,17 @@ class MediaDownloader:
             logging.info("Creating folder.")
             makedirs(self._settings["temp_folder"])
 
-    def _generateFilename(self, type: str, extension: str) -> str:
+    def _generateFilename(self, extension: str) -> str:
         """Generate a filename from a type and an extension.
 
         Args:
-            type (str): type of the file (audio, video, image, ...)
             extension (str): file extension
 
         Returns:
             str: file path complete with folder
         """
         timestamp = int(time() * 1e6)
-        return f"{self._download_folder}/{timestamp}-{type}.{extension}"
+        return f"{self._temp_folder}/{timestamp}.{extension}"
 
     def _extractLinksFromPlaylist(self, url: str, playlist: dict) -> tuple[str, str]:
         """Extract video and audio (if available) link from playlist and base url.
@@ -92,16 +93,19 @@ class MediaDownloader:
 
         return (video_url, audio_url)
 
-    def _downloadContent(self, url: str, path: str) -> str:
+    def _downloadContent(self, url: str, path: str = None) -> str:
         """Download content by its url and return its path.
 
         Args:
             url (str): content url
-            path (str): path to save the content
+            path (str, optional): path to save the content
 
         Returns:
             str: content path if download is successful, None otherwise
         """
+        if not path:
+            path = self._generateFilename("png")
+
         try:
             with open(path, "wb") as f:
                 f.write(requests.get(url).content)
@@ -109,6 +113,24 @@ class MediaDownloader:
         except Exception as e:
             logging.error(f"Error while downloading media. Error: {e}.")
             return None
+
+    def _extractFirstFrame(self, path: str) -> bool:
+        """Extract the first frame of a video or the gif.
+
+        Args:
+            path (str): path of the video or the gif
+
+        Returns:
+            bool: True if the extraction is successful, False otherwise
+        """
+        try:
+            ffmpeg.input(path).output(
+                self._preview_path, vframes=1
+            ).overwrite_output().run(quiet=True)
+            return True
+        except Exception as e:
+            logging.error(f"Error while extracting first frame. Error: {e}.")
+            return False
 
     def _downloadVReddit(self, url: str) -> tuple[str, str]:
         """Download a video from v.redd.it by its url.
@@ -131,14 +153,14 @@ class MediaDownloader:
         playlist = xmltodict.parse(r.content)["MPD"]["Period"]["AdaptationSet"]
         video_url, audio_url = self._extractLinksFromPlaylist(url, playlist)
 
-        video_path = self._generateFilename("video", "mp4")
+        video_path = self._generateFilename("mp4")
 
         if audio_url:
             # audio was found, download it separately from video
             logging.info("Downloading audio and video separately.")
 
-            audio_part_path = self._generateFilename("audio-part", "mp4")
-            video_part_path = self._generateFilename("video-part", "mp4")
+            audio_part_path = self._generateFilename("mp4")
+            video_part_path = self._generateFilename("mp4")
 
             self._downloadContent(audio_url, audio_part_path)
             self._downloadContent(video_url, video_part_path)
@@ -174,18 +196,29 @@ class MediaDownloader:
             self._downloadContent(video_url, video_path)
 
         # extract first frame
-        try:
-            logging.info("Extracting first frame")
-            ffmpeg.input(video_path, ss=0).output(
-                self._preview_path, vframes=1
-            ).overwrite_output().run(quiet=True)
-        except Exception as e:
-            logging.error(
-                f"Error while extracting first frame. Error: {e}. ffmpeg error: {ffmpeg.Error}"
-            )
-            return None, None
+        if self._extractFirstFrame(video_path):
+            return video_path, self._preview_path
 
-        return video_path, self._preview_path
+        return None, None
+
+    def _downloadGif(self, gif_url: str) -> tuple[str, str]:
+        """Download a gif from the url.
+
+        Args:
+            gif_url (str): url of the gif
+
+        Returns:
+            tuple[str, str]: path of gif and preview path
+        """
+        logging.info(f"Downloading gif from {gif_url}")
+        gif_path = self._generateFilename("gif")
+        self._downloadContent(gif_url, gif_path)
+
+        # extract first frame
+        if self._extractFirstFrame(gif_path):
+            return gif_path, self._preview_path
+
+        return None, None
 
     def downloadMedia(self, url: str) -> tuple[str, str]:
         """Download a media (either a video from v.redd.it, an image or a gif).
@@ -202,6 +235,12 @@ class MediaDownloader:
 
         logging.info(f"Attempting to download media from {url}.")
 
+        if any(ext in url for ext in self._gif_extensions):
+            gif_path, preview_path = self._downloadGif(url)
+            if gif_path:
+                logging.info(f"Downloading completed. Path: {gif_path}")
+                return gif_path, self._preview_path
+
         if any(ext in url for ext in self._video_extensions):
             video_path, preview_path = self._downloadVReddit(url)
             if video_path:
@@ -209,7 +248,7 @@ class MediaDownloader:
                 return video_path, preview_path
 
         if any(ext in url for ext in self._image_extensions):
-            image_path = self._downloadContent(url, self._image_path)
+            image_path = self._downloadContent(url)
             if image_path:
                 logging.info(f"Downloading complete. Path: {image_path}.")
                 return image_path, image_path
@@ -223,6 +262,7 @@ class MediaDownloader:
         Args:
             path (str): path of the file to delete
         """
+        logging.info(f"Deleting file {path}.")
         try:
             remove(path)
         except FileNotFoundError:
@@ -230,12 +270,19 @@ class MediaDownloader:
         except Exception as e:
             logging.error(f"Error while deleting file {path}. Error: {e}")
 
+    def cleanTempFolder(self) -> None:
+        """Delete all files in the temp folder."""
+        logging.info("Cleaning temp folder.")
+        for file in listdir(self._temp_folder):
+            self.deleteFile(f"{self._temp_folder}/{file}")
+
     def __str__(self) -> str:
         """Return string representation of object."""
         return "\n\t· ".join(
             [
                 "VideoDownloader:",
                 f"temp folder: {self._settings['temp_folder']}",
+                f"gif extensions: {self._gif_extensions}",
                 f"video extensions: {self._video_extensions}",
                 f"image extensions: {self._image_extensions}",
             ]
@@ -250,4 +297,4 @@ class MediaDownloader:
         Returns:
             bool
         """
-        return any(ext in url for ext in self._video_extensions)
+        return any(ext in url for ext in self._video_extensions + self._gif_extensions)

@@ -1,4 +1,5 @@
 """Class handling reddit interface."""
+from cmath import log
 import praw
 import ujson
 import logging
@@ -18,7 +19,10 @@ class Reddit:
         self._login()
 
     def _isVideo(self, url) -> bool:
-        return "v.redd.it" in url
+        return any(x in url for x in [".gif", "v.redd.it"])
+
+    def _isGif(self, url) -> bool:
+        return ".gif" in url
 
     def _loadSettings(self) -> None:
         """Load settings from file."""
@@ -63,28 +67,25 @@ class Reddit:
             if submission.selftext or submission.stickied:
                 continue
 
-            # skip galleries and videos
-            if any(x in submission.url for x in [".gif", "gallery"]):
-                continue
-
-            # skip gifs and videos if flag is set
-            if not self._settings["include_videos"] and self._isVideo(submission.url):
+            # skip galleries
+            if "gallery" in submission.url:
                 continue
 
             subreddit = submission.subreddit.display_name
             title = submission.title or None
             score = submission.score or -1
+            is_video = self._isVideo(submission.url)
 
             # Append the current found post to the list of posts
             posts.append(
                 Post(
-                    submission.url,
-                    submission.id,
-                    subreddit,
-                    title,
-                    score,
-                    timestamp,
-                    self._isVideo(submission.url),
+                    url=submission.url,
+                    id=submission.id,
+                    subreddit=subreddit,
+                    title=title,
+                    score=score,
+                    timestamp=timestamp,
+                    video=is_video,
                 )
             )
 
@@ -130,6 +131,5 @@ class Reddit:
                 "Reddit:",
                 f"requests: {self._settings['request_limit']}",
                 f"subreddits: {self.subreddits}",
-                f"videos included: {self._settings['include_videos']}",
             ]
         )

@@ -1,30 +1,33 @@
 {
+  "VideoDownloader": {
+    "temp_folder": "temp"
+  },
   "Reddit": {
-    "id": "REDDIT-ID",
-    "token": "REDDIT-TOKEN",
+    "id": "",
+    "token": "",
     "request_limit": 100,
-    "subreddits": ["SUBREDDITS", "LIST"],
-    "include_videos": true
+    "subreddits": [""]
   },
   "Fingerprinter": {
-    "tesseract_path": "TESSERACT_PATH"
+    "tesseract_path": ""
   },
   "Database": {
-    "mongodb_url": "URL-TO-MONGODB-SERVER",
-    "database_name": "MONGODB-DATBASE-NAME",
+    "mongodb_url": "",
+    "database_name": "",
     "max_days": 28
   },
   "Telegram": {
     "timezone": "Europe/Rome",
-    "token": "TELEGRAM-TOKEN",
-    "channel_name": "TELEGRAM-CHANNEL-NAME",
-    "caption": "POSTS-CAPTION",
-    "words_to_skip": ["WORDS", "TO", "SKIP"],
+    "token": "",
+    "channel_name": "",
+    "caption": "",
+    "words_to_skip": [""],
     "ocr": true,
-    "posts_per_day": 720,
+    "posts_per_day": 1440,
     "hash_threshold": 10,
     "start_delay": 0,
-    "preload_time": 1,
-    "admins": ["LIST", "OF", "ADMINS", "CHAT", "ID"]
+    "preload_time": 30,
+    "max_gif_size": 25,
+    "admins": []
   }
 }
