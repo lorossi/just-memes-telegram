@@ -310,7 +310,7 @@ class Telegram:
                 chat_id=channel_name, photo=open(post.path, "rb"), caption=caption
             )
 
-        self._downloader.deleteTempFiles()
+        self._downloader.deleteFile(post.path)
 
         logging.info("Sending memes routine completed.")
 
