@@ -27,14 +27,12 @@ class Telegram:
     status - show some infos about the bot
     nextpost - show at what time the next post is
     queue - view queue and add image(s) url(s) to queue
-    subreddits - views and sets source subreddits
-    postsperday - views and sets number of posts per day
     cleanqueue - cleans queue
     """
 
     def __init__(self):
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.1.1"  # current bot version
+        self._version = "2.1.1.2"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -461,7 +459,6 @@ class Telegram:
                     # fingerprint it and add it to database
                     post = Post(
                         url=url,
-                        timestamp=datetime.now().isoformat(),
                         video=self._downloader.isVideo(url),
                     )
 
@@ -504,70 +501,13 @@ class Telegram:
             disable_web_page_preview=True,
         )
 
-    def _botSubredditsCommand(self, update, context) -> None:
-        """Subreddits command handler."""
-        chat_id = update.effective_chat.id
-
-        if self._isAdmin(chat_id):
-            if len(context.args) == 0:
-                subreddits = self._reddit.subreddits
-                subreddits_list = "\n".join(subreddits).replace("_", "\\_")
-                message = (
-                    "_Current subreddits:_\n"
-                    f"{subreddits_list}"
-                    "\n_Pass the subreddit list as argument to set them_"
-                )
-
-            else:
-                self._reddit.subreddits = context.args
-                subreddits_list = "\n".join(context.args).replace("_", "\\_")
-
-                message = "_New subreddit list:_\n" f"{subreddits_list}"
-
-        else:
-            message = "*This command is for admins only*"
-
-        context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
-        )
-
-    def _botPostsperdayCommand(self, update, context) -> None:
-        """Postsperday command handler."""
-        chat_id = update.effective_chat.id
-
-        if self._isAdmin(chat_id):
-            if len(context.args) == 0:
-                message = (
-                    f"_Posts per day:_ {self._settings['posts_per_day']}\n"
-                    "_Pass the number of posts per day as argument "
-                    "to set a new value_"
-                )
-            else:
-                try:
-                    self._settings["posts_per_day"] = int(context.args[0])
-                    self._saveSettings()
-                    self._setMemesRoutineInterval()
-                except ValueError:
-                    message = "_The argument provided is not a number_"
-                    context.bot.send_message(
-                        chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
-                    )
-                    return
-            # notify user
-            message = f"_Number of posts per day:_ {self._settings['posts_per_day']}"
-        else:
-            message = "*This command is for admins only*"
-
-        context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
-        )
-
     def _botCleanqueueCommand(self, update, context) -> None:
         """Cleanqueue command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
             self._queue = []
+            message = "Queue cleaned"
         else:
             message = "*This command is for admins only*"
 
@@ -629,14 +569,6 @@ class Telegram:
 
         self._dispatcher.add_handler(
             CommandHandler("queue", self._botQueueCommand, pass_args=True)
-        )
-
-        self._dispatcher.add_handler(
-            CommandHandler("subreddits", self._botSubredditsCommand, pass_args=True)
-        )
-
-        self._dispatcher.add_handler(
-            CommandHandler("postsperday", self._botPostsperdayCommand, pass_args=True)
         )
 
         self._dispatcher.add_handler(
