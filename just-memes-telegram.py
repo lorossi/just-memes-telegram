@@ -144,9 +144,25 @@ class Telegram:
         )
 
     def _isAdmin(self, chat_id: str) -> bool:
+        """Check if user is admin.
+
+        Args:
+            chat_id (str): chat id
+
+        Returns:
+            bool
+        """
         return chat_id in self._settings["admins"]
 
-    def _getFileSize(self, url) -> float:
+    def _getFileSize(self, url: str) -> float:
+        """Get file size (in MB) by the file's url.
+
+        Args:
+            url (str): file url
+
+        Returns:
+            float
+        """
         try:
             s = requests.get(url, stream=True, allow_redirects=True).headers[
                 "Content-length"
@@ -156,13 +172,83 @@ class Telegram:
             logging.error(f"Error while getting file size: {e}")
             return -1
 
+    def _filterOldPosts(self, posts: list) -> list:
+        """Remove old posts from the list.
+
+        Args:
+            posts (list): list of new posts
+
+        Returns:
+            list
+        """
+        # load old ids, hashes and urls
+        old_ids = self._database.getOldIds()
+        old_urls = self._database.getOldUrls()
+        # filter images that match old ids or old urls
+        return [p for p in posts if p.id not in old_ids and p.url not in old_urls]
+
+    def _checkGifSize(self, url: str) -> bool:
+        """Check the size of a gif.
+
+        Args:
+            url (str): url of the gif
+
+        Returns:
+            bool: False if the gif is too big
+        """
+        size = self._getFileSize(url)
+
+        if size > self._settings["max_gif_size"]:
+            logging.warning(f"Gif size is too big: {size}MB")
+            return False
+
+        if size <= 0:
+            logging.warning(f"Skipping. Cannot get file size. Error code: {size}")
+            return False
+
+        return True
+
+    def _postHashValid(self, old_hashes: set[int], fingerprint_hash: int) -> bool:
+        """Check if the post hash is valid (and as such it has been posted before).
+
+        Args:
+            old_hashes (set[int]): list of old hashed
+            fingerprint_hash (int): hash to check
+
+        Returns:
+            bool
+        """
+        if any(
+            abs(fingerprint_hash - x) < self._settings["hash_threshold"]
+            for x in old_hashes
+        ):
+            return False
+
+        return True
+
+    def _postTextValid(self, text: str) -> bool:
+        """Check if the post text is valid (and as such it does not contain blocked words).
+
+        Args:
+            text (str): text of the post
+
+        Returns:
+            bool
+        """
+        if not text:
+            return True
+
+        if any(t in text for t in self._settings["words_to_skip"]):
+            return False
+
+        return True
+
     def _setMemesRoutineInterval(self) -> None:
         """Create routine to send memes."""
         until_preload, _ = self._calculatePreload()
         until_first, _ = self._calculateNextPost(until_preload)
         seconds_between = self._getSecondsBetweenPosts()
         # we remove already started jobs from the schedule
-        # (this happens when we change the number of posts per day)
 
         # first take care of send memes job
         # remove the old job, if already set
@@ -204,7 +290,7 @@ class Telegram:
 
         logging.info("Startup routine completed.")
 
-    def _botClearDatabaseRoutine(self, _: CallbackContext) -> None:
+    def _botCleanRoutine(self, _: CallbackContext) -> None:
         """Routine that handles the removal of old posts."""
         logging.info("Clear database routine begins.")
 
@@ -213,6 +299,9 @@ class Telegram:
             f"Removed {posts} post and {fingerprints} fingerprint documents "
             "of old data removed from database."
         )
+
+        logging.info("Clearing temp folder")
+        self._downloader.cleanTempFolder()
 
         logging.info("Clear database routine completed.")
 
@@ -223,17 +312,11 @@ class Telegram:
 
         if not self._queue:
             # no urls on queue, fetching a new one
-
-            # load old ids, hashes and urls
-            old_ids = self._database.getOldIds()
+            posts = self._reddit.fetch()
+            to_check = self._filterOldPosts(posts)
+            # load old hashes for reference. It has to be loaded BEFORE the loop because the new
+            #   post fingerprint will be added into the database as soon as it's created
             old_hashes = self._database.getOldHashes()
-            old_urls = self._database.getOldUrls()
-            # filter images that match old ids or old urls
-            to_check = [
-                p
-                for p in self._reddit.fetch()
-                if p.id not in old_ids and p.url not in old_urls
-            ]
 
             logging.info(f"Looking for a post between {len(to_check)} filtered posts.")
 
@@ -245,23 +328,15 @@ class Telegram:
 
                 # check if title contains anything not permitted
                 if any(s in post.title for s in self._settings["words_to_skip"]):
-                    logging.info("Skipping. Title contains skippable words.")
+                    logging.info(
+                        f"Skipping. Title contains skippable words: {post.title}"
+                    )
                     # update database
                     continue
 
                 # check if file is too big
                 if ".gif" in post.url:
-                    file_size = self._getFileSize(post.url)
-                    if file_size > self._settings["max_gif_size"]:
-                        logging.info(
-                            f"Skipping. File is too big. Size: {int(file_size)} MB"
-                        )
-                        continue
-
-                    if file_size <= 0:
-                        logging.info(
-                            f"Skipping. Cannot get file size. Error code: {file_size}"
-                        )
+                    if not self._checkGifSize(post.url):
                         continue
 
                 # first of all, download the media
@@ -286,24 +361,22 @@ class Telegram:
                 self._database.addData(fingerprint=fingerprint)
 
                 # check if the new post is too similar to an older one
-                if any(
-                    abs(fingerprint.hash - f) < self._settings["hash_threshold"]
-                    for f in old_hashes
-                ):
-                    logging.info("Skipping. Too similar to past image.")
-                    continue
+                if not self._postHashValid(old_hashes, fingerprint.hash):
+                    logging.warning(
+                        f"Skipping. Hash is too similar: {fingerprint.hash}"
+                    )
 
                 # check if caption contains anything not permitted
-                if self._settings["ocr"] and fingerprint.caption:
-                    if any(
-                        s in fingerprint.caption
-                        for s in self._settings["words_to_skip"]
-                    ):
-                        logging.info("Skipping. Caption contains skippable words.")
-                        continue
+                if self._settings["ocr"] and not self._postTextValid(
+                    fingerprint.caption
+                ):
+                    logging.warning(
+                        f"Skipping. Contains forbidden word: {fingerprint.caption}"
+                    )
+                    continue
 
                 # a post has been found
-                # adds the photo to bot queue so we can use this later
+                # adds the photo to bot queue so it can be used later
                 self._queue.append(post)
                 break
 
@@ -580,7 +653,7 @@ class Telegram:
 
         # this routine will clean the posted list
         self._jobqueue.run_daily(
-            self._botClearDatabaseRoutine,
+            self._botCleanRoutine,
             time(0, 15, 0, 000000),
             name="new_day_routine",
         )
