@@ -7,7 +7,7 @@ import requests
 import xmltodict
 
 from time import time
-from os import remove, path, makedirs, listdir, path
+from os import remove, path, makedirs, listdir
 
 
 class MediaDownloader:
@@ -17,6 +17,7 @@ class MediaDownloader:
         """Initialize the class."""
         self._settings_path = "settings/settings.json"
         self._loadSettings()
+        self._createTempFolder()
 
     def _loadSettings(self) -> None:
         """Load settings from file."""
@@ -179,7 +180,7 @@ class MediaDownloader:
                 remove(video_part_path)
             except ffmpeg.Error as e:
                 logging.error(
-                    f"Error while concatenating audio and video. Error: {e.stderr}"
+                    f"Error in FFMPEG while concatenating audio and video. Error: {e.stderr}"
                 )
                 remove(audio_part_path)
                 remove(video_part_path)
@@ -214,9 +215,35 @@ class MediaDownloader:
         gif_path = self._generateFilename("gif")
         self._downloadContent(gif_url, gif_path)
 
+        # convert gif to mp4
+        logging.info("Converting gif to mp4.")
+        video_path = self._generateFilename("mp4")
+
+        try:
+            ffmpeg.input(gif_path).filter(
+                "scale", "trunc(in_w/2)*2", "trunc(in_h/2)*2"
+            ).output(
+                video_path, **{"movflags": "faststart", "pix_fmt": "yuv420p"}
+            ).overwrite_output().run(
+                quiet=True
+            )
+        except ffmpeg.Error as e:
+            logging.error(
+                f"Error in FFMPEG while converting video to GIF. Error: {e.stderr}"
+            )
+            remove(gif_path)
+            return None, None
+        except Exception as e:
+            logging.error(f"Error while converting video to GIF. Error: {e}")
+            remove(gif_path)
+            return None, None
+
+        # remove old file
+        remove(gif_path)
+
         # extract first frame
-        if self._extractFirstFrame(gif_path):
-            return gif_path, self._preview_path
+        if self._extractFirstFrame(video_path):
+            return video_path, self._preview_path
 
         return None, None
 
