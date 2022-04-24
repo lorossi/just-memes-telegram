@@ -33,7 +33,7 @@ class Telegram:
 
     def __init__(self):
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.2"  # current bot version
+        self._version = "2.1.3"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -75,6 +75,11 @@ class Telegram:
         return raw
 
     def _getSecondsBetweenPosts(self) -> int:
+        """Return number of seconds between consecutive posts
+
+        Returns:
+            int
+        """
         return int(24 * 60 * 60 / self._settings["posts_per_day"])
 
     def _calculateNextPost(self, until_preload: int = None) -> tuple[int, str]:
