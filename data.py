@@ -46,4 +46,12 @@ class Post(GenericData):
     score: int = 0
     timestamp: float = time()
     video: bool = False
-    path = None
+    path: str = None
+
+    def setPath(self, path: str) -> None:
+        """Set the path of an already downloaded post.
+
+        Args:
+            path (str): path of the post
+        """
+        self.path = path

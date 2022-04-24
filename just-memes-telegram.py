@@ -33,7 +33,7 @@ class Telegram:
 
     def __init__(self):
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.3"  # current bot version
+        self._version = "2.1.3.1"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -75,7 +75,7 @@ class Telegram:
         return raw
 
     def _getSecondsBetweenPosts(self) -> int:
-        """Return number of seconds between consecutive posts
+        """Return number of seconds between consecutive posts.
 
         Returns:
             int
@@ -119,13 +119,13 @@ class Telegram:
         # convert second between posts into timedelta
         seconds_between = timedelta(seconds=self._getSecondsBetweenPosts())
         # convert start delay into timedelta
-        delay_minutes = timedelta(seconds=self._settings["start_delay"])
+        seconds_delay = timedelta(seconds=self._settings["start_delay"])
         # remove seconds and microseconds from now
         now = datetime.now().replace(microsecond=0)
         # starting time
         next_preload = (
             datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            + delay_minutes
+            + seconds_delay
             - preload_time
         )
         # loop until it's in the future
@@ -281,8 +281,6 @@ class Telegram:
             name="preload_memes",
         )
 
-    # Bot routines
-
     def _botStartupRoutine(self, context: CallbackContext) -> None:
         """Send a message to admins when the bot is started."""
         logging.info("Starting startup routine...")
@@ -315,83 +313,79 @@ class Telegram:
         logging.info("Preload memes routine begins.")
         # load url from reddit
 
-        if not self._queue:
-            # no urls on queue, fetching a new one
-            posts = self._reddit.fetch()
-            to_check = self._filterOldPosts(posts)
-            # load old hashes for reference. It has to be loaded BEFORE the loop because the new
-            #   post fingerprint will be added into the database as soon as it's created
-            old_hashes = self._database.getOldHashes()
-
-            logging.info(f"Looking for a post between {len(to_check)} filtered posts.")
-
-            for post in to_check:
-                logging.info(f"Checking post with url {post.url}.")
-                # this post can get approved or rejected
-                # either way, it should not be scanned again
-                self._database.addData(post=post)
-
-                # check if title contains anything not permitted
-                if any(s in post.title for s in self._settings["words_to_skip"]):
-                    logging.info(
-                        f"Skipping. Title contains skippable words: {post.title}"
-                    )
-                    # update database
-                    continue
-
-                # check if file is too big
-                if ".gif" in post.url:
-                    if not self._checkGifSize(post.url):
-                        continue
-
-                # first of all, download the media
-                post_path, preview_path = self._downloader.downloadMedia(post.url)
-                # no path = the download failed, continue
-                if not post_path:
-                    continue
-
-                # fingerprint the post
-                fingerprint = self._fingerprinter.fingerprint(
-                    path=preview_path, url=post.url
-                )
-
-                # sometimes images cannot be fingerprinted. In that case, try the next image.
-                if not fingerprint:
-                    continue
-
-                # save the path of the file
-                post.path = post_path
-
-                # update the database with post and fingerprint
-                self._database.addData(fingerprint=fingerprint)
-
-                # check if the new post is too similar to an older one
-                if not self._postHashValid(old_hashes, fingerprint.hash):
-                    logging.warning(
-                        f"Skipping. Hash is too similar: {fingerprint.hash}"
-                    )
-
-                # check if caption contains anything not permitted
-                if self._settings["ocr"] and not self._postTextValid(
-                    fingerprint.caption
-                ):
-                    logging.warning(
-                        f"Skipping. Contains forbidden word: {fingerprint.caption}"
-                    )
-                    continue
-
-                # a post has been found
-                # adds the photo to bot queue so it can be used later
-                self._queue.append(post)
-                break
-
-            logging.info(
-                f"Post found: url: {self._queue[-1].url}, path: {self._queue[-1].path}."
-            )
-        else:
+        if len(self._queue) > 0:
             logging.info(
                 f"Post already in queue: url: {self._queue[-1].url}, path: {self._queue[-1].path}."
             )
+            logging.info("Preload memes routine completed.")
+            return
+
+        # no urls on queue, fetching a new one
+        posts = self._reddit.fetch()
+        to_check = self._filterOldPosts(posts)
+        # load old hashes for reference. It has to be loaded BEFORE the loop because the new
+        #   post fingerprint will be added into the database as soon as it's created
+        old_hashes = self._database.getOldHashes()
+
+        logging.info(f"Looking for a post between {len(to_check)} filtered posts.")
+
+        for post in to_check:
+            logging.info(f"Checking post with url {post.url}.")
+            # this post can get approved or rejected
+            # either way, it should not be scanned again
+            self._database.addData(post=post)
+
+            # check if title contains anything not permitted
+            if any(s in post.title for s in self._settings["words_to_skip"]):
+                logging.info(f"Skipping. Title contains skippable words: {post.title}")
+                # update database
+                continue
+
+            # check if file is too big
+            if ".gif" in post.url:
+                if not self._checkGifSize(post.url):
+                    continue
+
+            # first of all, download the media
+            post_path, preview_path = self._downloader.downloadMedia(post.url)
+            # no path = the download failed, continue
+            if not post_path:
+                continue
+
+            # fingerprint the post
+            fingerprint = self._fingerprinter.fingerprint(
+                path=preview_path, url=post.url
+            )
+
+            # sometimes images cannot be fingerprinted. In that case, try the next image.
+            if not fingerprint:
+                continue
+
+            # save the path of the file
+            post.setPath(post_path)
+            # update the database with post and fingerprint
+            self._database.addData(fingerprint=fingerprint)
+
+            # check if the new post is too similar to an older one
+            if not self._postHashValid(old_hashes, fingerprint.hash):
+                logging.warning(f"Skipping. Hash is too similar: {fingerprint.hash}")
+                continue
+
+            # check if caption contains anything not permitted
+            if self._settings["ocr"] and not self._postTextValid(fingerprint.caption):
+                logging.warning(
+                    f"Skipping. Contains forbidden word: {fingerprint.caption}"
+                )
+                continue
+
+            # a post has been found
+            # adds the photo to bot queue so it can be used later
+            self._queue.append(post)
+            break
+
+        logging.info(
+            f"Valid post added to queue. Url: {self._queue[-1].url}, path: {self._queue[-1].path}."
+        )
 
         logging.info("Preload memes routine completed.")
 
@@ -580,13 +574,14 @@ class Telegram:
                         path=preview_path, url=post.url
                     )
 
-                    # sometimes images cannot be fingerprinted. In that case, try the next image.
+                    # sometimes images cannot be fingerprinted
+                    # if that happens, just skip it
                     if not fingerprint:
                         continue
 
                     # save the path of the file
-                    post.path = post_path
-
+                    post.setPath(post_path)
+                    # update database
                     self._database.addData(post=post, fingerprint=fingerprint)
                     # add it to queue
                     self._queue.append(post)
@@ -625,12 +620,19 @@ class Telegram:
         )
 
     def _botPingCommand(self, update, context) -> None:
-        """Ping command handler."""
+        """
+        Ping command handler.
+
+        This is just a quick way to check if the bot is still responding.
+        All it does is reply PONG to a particular message.
+        """
         chat_id = update.effective_chat.id
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
         message = "🏓 *PONG* 🏓"
         context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            chat_id=chat_id,
+            text=message,
+            parse_mode=ParseMode.MARKDOWN,
         )
 
     def start(self) -> None:
@@ -642,6 +644,7 @@ class Telegram:
         self._downloader = MediaDownloader()
 
         # clear temp folder in downloader
+        # sometimes, due to errors, files might be stuck in the temp folder
         self._downloader.cleanTempFolder()
 
         # set Defaults
@@ -707,6 +710,8 @@ class Telegram:
         """Return the bot's string representation."""
         post_timestamp, preload_timestamp = self._getNextTimestamps()
         ocr = "enabled" if self._settings["ocr"] else "off"
+        preload_time = self._settings["preload_time"]
+        start_delay = self._settings["start_delay"]
         return "\n\t· ".join(
             [
                 "Telegram Bot:",
@@ -714,8 +719,8 @@ class Telegram:
                 f"queue size: {len(self._queue)}",
                 f"next post scheduled for: {post_timestamp}",
                 f"next preload scheduled for: {preload_timestamp}",
-                f"preload time: {self._settings['preload_time']} seconds(s)",
-                f"start delay: {self._settings['start_delay']} second(s)",
+                f"preload time: {preload_time} second{'s' if preload_time > 1 else ''}",
+                f"start delay: {start_delay} second{'s' if preload_time > 1 else ''}",
                 f"posts per day: {self._settings['posts_per_day']}",
                 f"hash threshold: {self._settings['hash_threshold']}",
                 f"max gif size: {self._settings['max_gif_size']}",
