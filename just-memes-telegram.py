@@ -33,7 +33,7 @@ class Telegram:
 
     def __init__(self):
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.3.1"  # current bot version
+        self._version = "2.1.3.2"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -41,8 +41,6 @@ class Telegram:
         self._preload_memes_job = None
 
         self._loadSettings()
-
-    # Private methods
 
     def _loadSettings(self) -> None:
         """Load settings from file."""
