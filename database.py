@@ -44,7 +44,7 @@ class Database:
         self._db["fingerprints"].insert_one(fingerprint.serialize())
 
     def getOldIds(self) -> set[str]:
-        """Loadsold ids from database, either because their relative post was discarded or posted.
+        """Load old ids from database, either because their relative post was discarded or posted.
 
         Returns:
             set[str]: set of strings
@@ -164,7 +164,7 @@ class Database:
                 f"MongoDB version: {self.mongodb_version}",
                 f"MongoDB url: {self.mongodb_url}",
                 f"max days: {self._settings['max_days']}",
-                f"stored posts in databsse: {self.stored_data[0]}",
+                f"stored posts in database: {self.stored_data[0]}",
                 f"stored fingerprints in database: {self.stored_data[1]}",
             ]
         )

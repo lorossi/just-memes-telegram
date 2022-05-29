@@ -68,10 +68,10 @@ class MediaDownloader:
             ][0]["Representation"]
 
             if isinstance(video_representations, list):
-                # more than one video represention available
+                # more than one video representation available
                 video_url = url + "/" + video_representations[-1]["BaseURL"]
             else:
-                # only  one video represention available
+                # only one video representation available
                 video_url = url + "/" + video_representations["BaseURL"]
 
             audio_representations = [
@@ -79,7 +79,7 @@ class MediaDownloader:
             ][0]["Representation"]
 
             if isinstance(audio_representations, list):
-                # more than one audio represention available
+                # more than one audio representation available
                 audio_url = url + "/" + audio_representations[-1]["BaseURL"]
             else:
                 audio_url = url + "/" + audio_representations["BaseURL"]

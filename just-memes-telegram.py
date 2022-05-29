@@ -59,7 +59,7 @@ class Telegram:
             ujson.dump(old_settings, outfile, indent=2)
 
     def _escapeMarkdown(self, raw: str) -> str:
-        """Replace markdown delimites with escaped ones.
+        """Replace markdown delimiters with escaped ones.
 
         Args:
             raw (str): Un escaped string
@@ -113,7 +113,7 @@ class Telegram:
         """
         # convert preload time into timedelta
         preload_time = timedelta(seconds=self._settings["preload_time"])
-        # convert firest post into timedelta
+        # convert first post into timedelta
         # convert second between posts into timedelta
         seconds_between = timedelta(seconds=self._getSecondsBetweenPosts())
         # convert start delay into timedelta
