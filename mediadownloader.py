@@ -7,6 +7,7 @@ import requests
 import xmltodict
 
 from time import time
+from subprocess import run, PIPE
 from os import remove, path, makedirs, listdir
 
 
@@ -303,18 +304,6 @@ class MediaDownloader:
         for file in listdir(self._temp_folder):
             self.deleteFile(f"{self._temp_folder}/{file}")
 
-    def __str__(self) -> str:
-        """Return string representation of object."""
-        return "\n\t· ".join(
-            [
-                "VideoDownloader:",
-                f"temp folder: {self._settings['temp_folder']}",
-                f"gif extensions: {self._gif_extensions}",
-                f"video extensions: {self._video_extensions}",
-                f"image extensions: {self._image_extensions}",
-            ]
-        )
-
     def isVideo(self, url: str) -> bool:
         """Check if the given URL is a video.
 
@@ -325,3 +314,24 @@ class MediaDownloader:
             bool
         """
         return any(ext in url for ext in self._video_extensions + self._gif_extensions)
+
+    @property
+    def ffmpeg_version(self) -> str:
+        """Return FFMPEG version."""
+        result = run(["ffmpeg", "-version"], stdout=PIPE, stderr=PIPE).stdout.decode(
+            "utf-8"
+        )
+        return result.split("\n")[0].split("version ")[1].split(" ")[0]
+
+    def __str__(self) -> str:
+        """Return string representation of object."""
+        return "\n\t· ".join(
+            [
+                "VideoDownloader:",
+                f"temp folder: {self._settings['temp_folder']}",
+                f"gif extensions: {self._gif_extensions}",
+                f"video extensions: {self._video_extensions}",
+                f"image extensions: {self._image_extensions}",
+                f"ffmpeg version: {self.ffmpeg_version}",
+            ]
+        )

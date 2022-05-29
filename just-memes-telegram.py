@@ -33,7 +33,7 @@ class Telegram:
 
     def __init__(self):
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.3.2"  # current bot version
+        self._version = "2.1.3.3"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -721,7 +721,7 @@ class Telegram:
                 f"start delay: {start_delay} second{'s' if preload_time > 1 else ''}",
                 f"posts per day: {self._settings['posts_per_day']}",
                 f"hash threshold: {self._settings['hash_threshold']}",
-                f"max gif size: {self._settings['max_gif_size']}",
+                f"max gif size: {self._settings['max_gif_size']} MB",
                 f"ocr: {ocr}",
                 f"words to skip: {self.words_to_skip}",
             ]

@@ -164,7 +164,7 @@ class Database:
                 f"MongoDB version: {self.mongodb_version}",
                 f"MongoDB url: {self.mongodb_url}",
                 f"max days: {self._settings['max_days']}",
-                f"stored posts in databse: {self.stored_data[0]}",
+                f"stored posts in databsse: {self.stored_data[0]}",
                 f"stored fingerprints in database: {self.stored_data[1]}",
             ]
         )
