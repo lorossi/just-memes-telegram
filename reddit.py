@@ -128,7 +128,7 @@ class Reddit:
         """Get string representation of object."""
         return "\n\t· ".join(
             [
-                "Reddit:",
+                f"{self.__class__.__name__}:",
                 f"requests: {self._settings['request_limit']}",
                 f"subreddits: {self.subreddits}",
             ]

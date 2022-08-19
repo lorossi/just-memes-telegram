@@ -33,7 +33,7 @@ class Telegram:
 
     def __init__(self):
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.3.3"  # current bot version
+        self._version = "2.1.3.4"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -712,7 +712,7 @@ class Telegram:
         start_delay = self._settings["start_delay"]
         return "\n\t· ".join(
             [
-                "Telegram Bot:",
+                f"{self.__class__.__name__}:",
                 f"version: {self._version}",
                 f"queue size: {len(self._queue)}",
                 f"next post scheduled for: {post_timestamp}",

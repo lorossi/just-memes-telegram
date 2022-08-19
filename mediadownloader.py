@@ -327,7 +327,7 @@ class MediaDownloader:
         """Return string representation of object."""
         return "\n\t· ".join(
             [
-                "VideoDownloader:",
+                f"{self.__class__.__name__}:",
                 f"temp folder: {self._settings['temp_folder']}",
                 f"gif extensions: {self._gif_extensions}",
                 f"video extensions: {self._video_extensions}",

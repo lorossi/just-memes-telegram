@@ -159,7 +159,7 @@ class Database:
         """Return string representation of the database object."""
         return "\n\t· ".join(
             [
-                "Database:",
+                f"{self.__class__.__name__}:",
                 f"status: {'connected' if self.is_connected else 'not connected'}",
                 f"MongoDB version: {self.mongodb_version}",
                 f"MongoDB url: {self.mongodb_url}",

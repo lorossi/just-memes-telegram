@@ -95,7 +95,7 @@ class Fingerprinter:
         """Return string representation of the Fingerprinter object."""
         return "\n\t· ".join(
             [
-                "Fingerprinter:",
+                f"{self.__class__.__name__}:",
                 f"imagehash version: {imagehash.__version__}",
                 f"pytesseract version: {pytesseract.__version__}",
                 f"tesseract version: {self.pytesseract_version }",
