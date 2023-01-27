@@ -1,7 +1,7 @@
 # Just Memes Telegram
 
 *Because, as always, using what's already there it's not good for me.*
-*I need to spend at least a year developing some _kind of _over-engineered_ and barely_ working software.*
+*I need to spend at least a year developing some kind of over-engineered and barely working software.*
 
 *TL:DR* [click here](https://t.me/justmemes69lmao)
 
