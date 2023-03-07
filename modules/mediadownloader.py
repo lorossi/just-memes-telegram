@@ -181,7 +181,8 @@ class MediaDownloader:
                 remove(video_part_path)
             except ffmpeg.Error as e:
                 logging.error(
-                    f"Error in FFMPEG while concatenating audio and video. Error: {e.stderr}"
+                    "Error in FFMPEG while concatenating audio and video. "
+                    f"Error: {e.stderr}"
                 )
                 remove(audio_part_path)
                 remove(video_part_path)

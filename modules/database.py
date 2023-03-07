@@ -11,10 +11,11 @@ from .data import Fingerprint, Post
 class Database:
     """Class to interface to MongoDB database."""
 
+    _client: pymongo.MongoClient = None
+
     def __init__(self):
         """Initialize the database object."""
         self._settings_path = "settings/settings.json"
-        self._client = None  # Pymongo client
         self._loadSettings()
         self._connect()
 
@@ -45,7 +46,8 @@ class Database:
         self._db["fingerprints"].insert_one(fingerprint.serialize())
 
     def getOldIds(self) -> set[str]:
-        """Load old ids from database, either because their relative post was discarded or posted.
+        """Load old ids from database, either because their relative post \
+            has already been discarded or posted.
 
         Returns:
             set[str]: set of strings
@@ -53,7 +55,8 @@ class Database:
         return {x["id"] for x in self._db["posts"].find({}, projection=["id"])}
 
     def getOldUrls(self) -> set[str]:
-        """Load old urls from database, either because their relative post was discarded or posted.
+        """Load old urls from database, either because their relative post \
+            has already been discarded or posted.
 
         Returns:
             set[str]: set of strings

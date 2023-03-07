@@ -1,16 +1,23 @@
 import logging
+import tracemalloc
 
 from modules.telegrambot import TelegramBot
 
 
 def main():
     """Start the bot. Function automatically called whenever the script is run."""
+    format = (
+        "%(asctime)s - %(levelname)s - %(module)s (%(lineno)d, in %(funcName)s) "
+        "- %(message)s"
+    )
+    filename = __file__.replace(".py", ".log")
     logging.basicConfig(
-        filename=__file__.replace(".py", ".log"),
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
+        format=format,
+        filename=filename,
         filemode="w",
     )
+    tracemalloc.start()
 
     logging.info("Script started.")
     t = TelegramBot()
