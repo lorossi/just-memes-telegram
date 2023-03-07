@@ -35,7 +35,6 @@ class TelegramBot:
         """Initialize the bot. Settings are automatically loaded."""
         self._version = "2.1.4"  # current bot version
         self._settings_path = "settings/settings.json"
-        self._settings = []
         self._queue = []
         self._send_memes_job = None
         self._preload_memes_job = None
@@ -291,6 +290,9 @@ class TelegramBot:
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
 
+        next_post, next_preload = self._getNextTimestamps()
+        logging.info(f"Next post: {next_post}, next preload: {next_preload}")
+
         logging.info("Startup routine completed.")
 
     def _botCleanRoutine(self, _: CallbackContext) -> None:
@@ -308,7 +310,7 @@ class TelegramBot:
 
         logging.info("Clear database routine completed.")
 
-    def _botPreloadmemeRoutine(self, _: CallbackContext) -> None:
+    async def _botPreloadmemeRoutine(self, _: CallbackContext) -> None:
         """Routine that preloads memes and puts them into queue."""
         logging.info("Preload memes routine begins.")
         # load url from reddit
@@ -322,8 +324,14 @@ class TelegramBot:
             return
 
         # no urls on queue, fetching a new one
-        posts = self._reddit.fetch()
+        posts = await self._reddit.fetch()
+
+        # filter old posts
+        len_before = len(posts)
         to_check = self._filterOldPosts(posts)
+        len_after = len(to_check)
+        logging.info(f"Filtered {len_before - len_after} old posts.")
+
         # load old hashes for reference. It has to be loaded BEFORE the loop
         #   because the new post fingerprint will be added into the database
         #   as soon as it's created
@@ -386,6 +394,10 @@ class TelegramBot:
             self._queue.append(post)
             break
 
+        if not self._queue:
+            logging.error("No valid post found. Aborting.")
+            return
+
         logging.info(
             f"Valid post added to queue. Url: {self._queue[-1].url}, "
             f"path: {self._queue[-1].path}."
@@ -393,7 +405,7 @@ class TelegramBot:
 
         logging.info("Preload memes routine completed.")
 
-    def _botSendmemeRoutine(self, context: CallbackContext) -> None:
+    async def _botSendmemeRoutine(self, context: CallbackContext) -> None:
         """Routine that send memes when it's time to do so."""
         logging.info("Sending memes routine begins.")
 
@@ -408,12 +420,12 @@ class TelegramBot:
 
         if post.video:
             logging.info(f"Sending video with path: {post.path}")
-            context.bot.send_video(
+            await context.bot.send_video(
                 chat_id=channel_name, video=open(post.path, "rb"), caption=caption
             )
         else:
             logging.info(f"Sending image with path: {post.path}")
-            context.bot.send_photo(
+            await context.bot.send_photo(
                 chat_id=channel_name, photo=open(post.path, "rb"), caption=caption
             )
 
@@ -723,5 +735,3 @@ class TelegramBot:
                 f"words to skip: {self.words_to_skip}",
             ]
         )
-
-

@@ -1,9 +1,8 @@
 """Class handling reddit interface."""
 import logging
-from cmath import log
 from time import time
 
-import praw
+import asyncpraw
 import ujson
 
 from .data import Post
@@ -14,16 +13,12 @@ class Reddit:
 
     def __init__(self) -> None:
         """Initialize the reddit object."""
-        self._settings = {}
         self._settings_path = "settings/settings.json"
         self._loadSettings()
         self._login()
 
     def _isVideo(self, url) -> bool:
         return any(x in url for x in [".gif", "v.redd.it"])
-
-    def _isGif(self, url) -> bool:
-        return ".gif" in url
 
     def _loadSettings(self) -> None:
         """Load settings from file."""
@@ -43,13 +38,13 @@ class Reddit:
 
     def _login(self) -> None:
         """Login into Reddit app api."""
-        self.reddit = praw.Reddit(
+        self.reddit = asyncpraw.Reddit(
             client_id=self._settings["id"],
             client_secret=self._settings["token"],
             user_agent="PC",
         )
 
-    def _loadPosts(self) -> list[Post]:
+    async def _loadPosts(self) -> list[Post]:
         """Load posts from Reddit.
 
         Returns:
@@ -59,10 +54,8 @@ class Reddit:
         timestamp = time()
         posts = []
 
-        subreddit_list = "+".join(self._settings["subreddits"])
-        for submission in self.reddit.subreddit(subreddit_list).hot(
-            limit=self._settings["request_limit"]
-        ):
+        subreddits = await self.reddit.subreddit("+".join(self._settings["subreddits"]))
+        async for submission in subreddits.hot(limit=self._settings["request_limit"]):
             # we want to skip selftexts and stickied submission
             if submission.selftext or submission.stickied:
                 continue
@@ -71,7 +64,7 @@ class Reddit:
             if "gallery" in submission.url:
                 continue
 
-            subreddit = submission.subreddit.display_name
+            subreddits = submission.subreddit.display_name
             title = submission.title or None
             score = submission.score or -1
             is_video = self._isVideo(submission.url)
@@ -81,7 +74,7 @@ class Reddit:
                 Post(
                     url=submission.url,
                     id=submission.id,
-                    subreddit=subreddit,
+                    subreddit=subreddits,
                     title=title,
                     score=score,
                     timestamp=timestamp,
@@ -91,11 +84,11 @@ class Reddit:
 
         # no posts have been found
         if not posts:
-            return None
+            return []
 
         return sorted(posts, key=lambda x: x.score, reverse=True)
 
-    def fetch(self) -> list[Post]:
+    async def fetch(self) -> list[Post]:
         """Fetch posts from Reddit.
 
         Returns:
@@ -103,9 +96,8 @@ class Reddit:
         """
         logging.info("Fetching new memes.")
 
-        posts = self._loadPosts()
-
-        logging.info(f"{len(posts)} posts found.")
+        posts = await self._loadPosts()
+        logging.info(f"{len(posts)} posts loaded.")
 
         return posts
 
