@@ -1,4 +1,5 @@
 """Main bot script."""
+from __future__ import annotations
 
 import logging
 import os
@@ -31,7 +32,7 @@ class TelegramBot:
     cleanqueue - cleans queue
     """
 
-    def __init__(self):
+    def __init__(self) -> TelegramBot:
         """Initialize the bot. Settings are automatically loaded."""
         self._version = "2.1.4"  # current bot version
         self._settings_path = "settings/settings.json"

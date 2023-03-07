@@ -1,4 +1,6 @@
 """Class handling all the database operations."""
+from __future__ import annotations
+
 from time import time
 
 import pymongo
@@ -13,7 +15,7 @@ class Database:
 
     _client: pymongo.MongoClient = None
 
-    def __init__(self):
+    def __init__(self) -> Database:
         """Initialize the database object."""
         self._settings_path = "settings/settings.json"
         self._loadSettings()

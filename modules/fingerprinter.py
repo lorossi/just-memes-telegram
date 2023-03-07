@@ -1,4 +1,5 @@
 """Class handling data (Videos and Images) fingerprinting."""
+from __future__ import annotations
 
 import logging
 from string import printable
@@ -16,7 +17,7 @@ from .data import Fingerprint
 class Fingerprinter:
     """Class handling data (Videos and Images) fingerprinting."""
 
-    def __init__(self):
+    def __init__(self) -> Fingerprinter:
         """Initialize the fingerprinter object."""
         self._settings_path = "settings/settings.json"
         self._loadSettings()

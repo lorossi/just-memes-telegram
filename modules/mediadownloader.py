@@ -1,4 +1,5 @@
 """Reddit Downloader class."""
+from __future__ import annotations
 
 import logging
 from os import listdir, makedirs, path, remove
@@ -14,7 +15,7 @@ import xmltodict
 class MediaDownloader:
     """Reddit Downloader class."""
 
-    def __init__(self):
+    def __init__(self) -> MediaDownloader:
         """Initialize the class."""
         self._settings_path = "settings/settings.json"
         self._loadSettings()

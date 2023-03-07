@@ -1,4 +1,6 @@
 """Class handling reddit interface."""
+from __future__ import annotations
+
 import logging
 from time import time
 
@@ -11,7 +13,7 @@ from .data import Post
 class Reddit:
     """Class handling reddit interface."""
 
-    def __init__(self) -> None:
+    def __init__(self) -> Reddit:
         """Initialize the reddit object."""
         self._settings_path = "settings/settings.json"
         self._loadSettings()
