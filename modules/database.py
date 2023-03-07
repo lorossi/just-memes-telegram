@@ -4,7 +4,7 @@ import pymongo
 
 from time import time
 from imagehash import hex_to_hash
-from data import Post, Fingerprint
+from .data import Post, Fingerprint
 
 
 class Database:

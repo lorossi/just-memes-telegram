@@ -98,7 +98,7 @@ By making use of the new Python 3 `dataclass` classes, the jump into the "future
 I'll leave this as an image.
 I should have read the wiki more carefully.
 
-![I use arch, BTW](mongodb.png)
+![I use arch, BTW](src/mongodb.png)
 
 I use arch, by the way.
 

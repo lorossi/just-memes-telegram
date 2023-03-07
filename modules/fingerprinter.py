@@ -9,7 +9,7 @@ import pytesseract
 
 from PIL import Image
 from time import time
-from data import Fingerprint
+from .data import Fingerprint
 from string import printable
 
 

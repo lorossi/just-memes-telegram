@@ -11,11 +11,11 @@ from datetime import time, datetime, timedelta
 from telegram import ParseMode, ChatAction
 from telegram.ext import Updater, CommandHandler, CallbackContext, Defaults
 
-from data import Post
-from reddit import Reddit
-from database import Database
-from fingerprinter import Fingerprinter
-from mediadownloader import MediaDownloader
+from modules.data import Post
+from modules.reddit import Reddit
+from modules.database import Database
+from modules.fingerprinter import Fingerprinter
+from modules.mediadownloader import MediaDownloader
 
 
 class Telegram:
