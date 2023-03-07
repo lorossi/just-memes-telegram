@@ -5,7 +5,7 @@ import ujson
 import logging
 
 from time import time
-from data import Post
+from .data import Post
 
 
 class Reddit:
@@ -62,7 +62,6 @@ class Reddit:
         for submission in self.reddit.subreddit(subreddit_list).hot(
             limit=self._settings["request_limit"]
         ):
-
             # we want to skip selftexts and stickied submission
             if submission.selftext or submission.stickied:
                 continue
