@@ -1,10 +1,11 @@
 """Class handling reddit interface."""
+import logging
 from cmath import log
+from time import time
+
 import praw
 import ujson
-import logging
 
-from time import time
 from .data import Post
 
 

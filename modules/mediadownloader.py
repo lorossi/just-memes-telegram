@@ -1,14 +1,14 @@
 """Reddit Downloader class."""
 
-import ujson
-import ffmpeg
 import logging
-import requests
-import xmltodict
-
+from os import listdir, makedirs, path, remove
+from subprocess import PIPE, run
 from time import time
-from subprocess import run, PIPE
-from os import remove, path, makedirs, listdir
+
+import ffmpeg
+import requests
+import ujson
+import xmltodict
 
 
 class MediaDownloader:
