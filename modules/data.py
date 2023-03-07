@@ -1,7 +1,7 @@
 """Class handling Fingerprints and Posts, with the ability to be serialized."""
 
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from time import time
 
 

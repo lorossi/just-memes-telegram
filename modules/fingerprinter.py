@@ -1,16 +1,16 @@
 """Class handling data (Videos and Images) fingerprinting."""
 
-import ujson
 import logging
-import requests
+from string import printable
+from time import time
+
 import imagehash
 import pytesseract
-
-
+import requests
+import ujson
 from PIL import Image
-from time import time
+
 from .data import Fingerprint
-from string import printable
 
 
 class Fingerprinter:

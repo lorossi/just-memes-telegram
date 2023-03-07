@@ -1,10 +1,11 @@
 """Class handling all the database operations."""
-import ujson
-import pymongo
-
 from time import time
+
+import pymongo
+import ujson
 from imagehash import hex_to_hash
-from .data import Post, Fingerprint
+
+from .data import Fingerprint, Post
 
 
 class Database:
