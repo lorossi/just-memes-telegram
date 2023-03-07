@@ -8,8 +8,8 @@ import logging
 import requests
 
 from datetime import time, datetime, timedelta
-from telegram import ParseMode, ChatAction
-from telegram.ext import Updater, CommandHandler, CallbackContext, Defaults
+from telegram import  constants
+from telegram.ext import CommandHandler, CallbackContext, Application, Defaults
 
 from modules.data import Post
 from modules.reddit import Reddit
@@ -33,7 +33,7 @@ class Telegram:
 
     def __init__(self):
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.3.4"  # current bot version
+        self._version = "2.1.4"  # current bot version
         self._settings_path = "settings/settings.json"
         self._settings = []
         self._queue = []
@@ -84,7 +84,8 @@ class Telegram:
         """Calculate seconds until next post and its timestamp.
 
         Args:
-            until_preload (int, optional): Seconds until next preload. If None, it's recalculated.
+            until_preload (int, optional): Seconds until next preload. \
+                If None, it's recalculated.
 
         Returns:
             tuple[int, str]: seconds until next post and its timestamp
@@ -230,7 +231,8 @@ class Telegram:
         return True
 
     def _postTextValid(self, text: str) -> bool:
-        """Check if the post text is valid (and as such it does not contain blocked words).
+        """Check if the post text is valid \
+            (and as such it does not contain blocked words).
 
         Args:
             text (str): text of the post
@@ -279,14 +281,14 @@ class Telegram:
             name="preload_memes",
         )
 
-    def _botStartupRoutine(self, context: CallbackContext) -> None:
+    async def _botStartupRoutine(self, context: CallbackContext) -> None:
         """Send a message to admins when the bot is started."""
         logging.info("Starting startup routine...")
 
         message = "*Bot started!*"
         for chat_id in self._settings["admins"]:
-            context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            await context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
 
         logging.info("Startup routine completed.")
@@ -313,7 +315,8 @@ class Telegram:
 
         if len(self._queue) > 0:
             logging.info(
-                f"Post already in queue: url: {self._queue[-1].url}, path: {self._queue[-1].path}."
+                f"Post already in queue: url: {self._queue[-1].url}, "
+                f"path: {self._queue[-1].path}."
             )
             logging.info("Preload memes routine completed.")
             return
@@ -321,8 +324,9 @@ class Telegram:
         # no urls on queue, fetching a new one
         posts = self._reddit.fetch()
         to_check = self._filterOldPosts(posts)
-        # load old hashes for reference. It has to be loaded BEFORE the loop because the new
-        #   post fingerprint will be added into the database as soon as it's created
+        # load old hashes for reference. It has to be loaded BEFORE the loop
+        #   because the new post fingerprint will be added into the database
+        #   as soon as it's created
         old_hashes = self._database.getOldHashes()
 
         logging.info(f"Looking for a post between {len(to_check)} filtered posts.")
@@ -355,7 +359,8 @@ class Telegram:
                 path=preview_path, url=post.url
             )
 
-            # sometimes images cannot be fingerprinted. In that case, try the next image.
+            # sometimes images cannot be fingerprinted.
+            #   In that case, try the next image.
             if not fingerprint:
                 continue
 
@@ -382,7 +387,8 @@ class Telegram:
             break
 
         logging.info(
-            f"Valid post added to queue. Url: {self._queue[-1].url}, path: {self._queue[-1].path}."
+            f"Valid post added to queue. Url: {self._queue[-1].url}, "
+            f"path: {self._queue[-1].path}."
         )
 
         logging.info("Preload memes routine completed.")
@@ -415,13 +421,13 @@ class Telegram:
 
         logging.info("Sending memes routine completed.")
 
-    def _botError(self, update, context) -> None:
+    async def _botError(self, update, context) -> None:
         """Send a message to admins whenever an error is raised."""
         message = "*ERROR RAISED*"
         # admin message
         for chat_id in self._settings["admins"]:
-            context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            await context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
 
         error_string = str(context.error)
@@ -434,7 +440,7 @@ class Telegram:
         )
 
         for chat_id in self._settings["admins"]:
-            context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id, text=message, disable_web_page_preview=True
             )
 
@@ -442,7 +448,7 @@ class Telegram:
         logging.error(f"Update {update} caused error {context.error}.")
 
     # Bot commands
-    def _botStartCommand(self, update, context) -> None:
+    async def _botStartCommand(self, update, context) -> None:
         """Start command handler."""
         chat_id = update.effective_chat.id
 
@@ -452,48 +458,48 @@ class Telegram:
             f"_Join us at_ {self._settings['channel_name']}"
         )
 
-        context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+        await context.bot.send_message(
+            chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
         )
 
-    def _botResetCommand(self, update, context) -> None:
+    async def _botResetCommand(self, update, context) -> None:
         """Reset command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
             message = "_Resetting..._"
 
-            context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            await context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
 
             logging.warning("Resetting...")
             os.execl(sys.executable, sys.executable, *sys.argv)
         else:
             message = "*This command is for admins only*"
-            context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            await context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
 
-    def _botStopCommand(self, update, context) -> None:
+    async def _botStopCommand(self, update, context) -> None:
         """Stop command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
             message = "_Bot stopped_"
-            context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            await context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
             self._updater.stop()
             logging.warning("Bot stopped.")
             os._exit()
         else:
             message = "*This command is for admins only*"
-            context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            await context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
 
-    def _botStatusCommand(self, update, context) -> None:
+    async def _botStatusCommand(self, update, context) -> None:
         """Status command handler."""
         chat_id = update.effective_chat.id
 
@@ -514,11 +520,11 @@ class Telegram:
         else:
             message = "*This command is for admins only*"
 
-        context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+        await context.bot.send_message(
+            chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
         )
 
-    def _botNextpostCommand(self, update, context) -> None:
+    async def _botNextpostCommand(self, update, context) -> None:
         """Nextpost command handler."""
         chat_id = update.effective_chat.id
 
@@ -534,11 +540,11 @@ class Telegram:
         else:
             message = "*This command is for admins only*"
 
-        context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+        await context.bot.send_message(
+            chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
         )
 
-    def _botQueueCommand(self, update, context) -> None:
+    async def _botQueueCommand(self, update, context) -> None:
         """Queue command handler."""
         chat_id = update.effective_chat.id
 
@@ -596,14 +602,14 @@ class Telegram:
         else:
             message = "*This command is for admins only*"
 
-        context.bot.send_message(
+        await context.bot.send_message(
             chat_id=chat_id,
             text=message,
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=constants.ParseMode.MARKDOWN,
             disable_web_page_preview=True,
         )
 
-    def _botCleanqueueCommand(self, update, context) -> None:
+    async def _botCleanqueueCommand(self, update, context) -> None:
         """Cleanqueue command handler."""
         chat_id = update.effective_chat.id
 
@@ -613,11 +619,11 @@ class Telegram:
         else:
             message = "*This command is for admins only*"
 
-        context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+        await context.bot.send_message(
+            chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
         )
 
-    def _botPingCommand(self, update, context) -> None:
+    async def _botPingCommand(self, update, context) -> None:
         """
         Ping command handler.
 
@@ -625,12 +631,14 @@ class Telegram:
         All it does is reply PONG to a particular message.
         """
         chat_id = update.effective_chat.id
-        context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+        await context.bot.send_chat_action(
+            chat_id=chat_id, action=constants.ChatAction.TYPING
+        )
         message = "🏓 *PONG* 🏓"
-        context.bot.send_message(
+        await context.bot.send_message(
             chat_id=chat_id,
             text=message,
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=constants.ParseMode.MARKDOWN,
         )
 
     def start(self) -> None:
@@ -645,14 +653,13 @@ class Telegram:
         # sometimes, due to errors, files might be stuck in the temp folder
         self._downloader.cleanTempFolder()
 
-        # set Defaults
-        defaults = Defaults(tzinfo=pytz.timezone(self._settings["timezone"]))
-        # start the bot
-        self._updater = Updater(
-            self._settings["token"], use_context=True, defaults=defaults
+        self._application = (
+            Application.builder()
+            .token(self._settings["token"])
+            .defaults(Defaults(tzinfo=pytz.timezone(self._settings["timezone"])))
+            .build()
         )
-        self._dispatcher = self._updater.dispatcher
-        self._jobqueue = self._updater.job_queue
+        self._jobqueue = self._application.job_queue
 
         # this routine will notify the admins
         self._jobqueue.run_once(self._botStartupRoutine, when=1, name="startup_routine")
@@ -668,36 +675,26 @@ class Telegram:
         self._setMemesRoutineInterval()
 
         # these are the handlers for all the commands
-        self._dispatcher.add_handler(CommandHandler("start", self._botStartCommand))
-
-        self._dispatcher.add_handler(CommandHandler("reset", self._botResetCommand))
-
-        self._dispatcher.add_handler(CommandHandler("stop", self._botStopCommand))
-
-        self._dispatcher.add_handler(CommandHandler("status", self._botStatusCommand))
-
-        self._dispatcher.add_handler(
+        self._application.add_handler(CommandHandler("start", self._botStartCommand))
+        self._application.add_handler(CommandHandler("reset", self._botResetCommand))
+        self._application.add_handler(CommandHandler("stop", self._botStopCommand))
+        self._application.add_handler(CommandHandler("status", self._botStatusCommand))
+        self._application.add_handler(
             CommandHandler("nextpost", self._botNextpostCommand)
         )
-
-        self._dispatcher.add_handler(
-            CommandHandler("queue", self._botQueueCommand, pass_args=True)
-        )
-
-        self._dispatcher.add_handler(
+        self._application.add_handler(CommandHandler("queue", self._botQueueCommand))
+        self._application.add_handler(
             CommandHandler("cleanqueue", self._botCleanqueueCommand)
         )
-
         # hidden command, not in list
-        self._dispatcher.add_handler(CommandHandler("ping", self._botPingCommand))
+        self._application.add_handler(CommandHandler("ping", self._botPingCommand))
 
         # this handler will notify the admins and the user if something went
         #   wrong during the execution
-        self._dispatcher.add_error_handler(self._botError)
+        self._application.add_error_handler(self._botError)
 
-        self._updater.start_polling()
         logging.info("Bot running.")
-        self._updater.idle()
+        self._application.run_polling()
 
     @property
     def words_to_skip(self) -> str:
