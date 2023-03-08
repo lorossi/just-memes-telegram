@@ -296,7 +296,7 @@ class TelegramBot:
 
         logging.info("Startup routine completed.")
 
-    def _botCleanRoutine(self, _: CallbackContext) -> None:
+    async def _botCleanRoutine(self, _: CallbackContext) -> None:
         """Routine that handles the removal of old posts."""
         logging.info("Clear database routine begins.")
 
