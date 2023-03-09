@@ -670,6 +670,9 @@ class TelegramBot:
             Application.builder()
             .token(self._settings["token"])
             .defaults(Defaults(tzinfo=pytz.timezone(self._settings["timezone"])))
+            .read_timeout(10)
+            .connect_timeout(10)
+            .pool_timeout(10)
             .build()
         )
         self._jobqueue = self._application.job_queue
