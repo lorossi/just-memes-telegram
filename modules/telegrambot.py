@@ -453,9 +453,7 @@ class TelegramBot:
         )
 
         for chat_id in self._settings["admins"]:
-            await context.bot.send_message(
-                chat_id=chat_id, text=message, disable_web_page_preview=True
-            )
+            await context.bot.send_message(chat_id=chat_id, text=message)
 
         # logs to file
         logging.error(f"Update {update} caused error {context.error}.")
@@ -619,7 +617,6 @@ class TelegramBot:
             chat_id=chat_id,
             text=message,
             parse_mode=constants.ParseMode.MARKDOWN,
-            disable_web_page_preview=True,
         )
 
     async def _botCleanqueueCommand(self, update, context) -> None:
@@ -669,7 +666,13 @@ class TelegramBot:
         self._application = (
             Application.builder()
             .token(self._settings["token"])
-            .defaults(Defaults(tzinfo=pytz.timezone(self._settings["timezone"])))
+            .defaults(
+                Defaults(
+                    tzinfo=pytz.timezone(self._settings["timezone"]),
+                    disable_web_page_preview=True,
+                )
+            )
+            .pool_timeout(10)
             .get_updates_http_version("1.1")
             .http_version("1.1")
             .build()
