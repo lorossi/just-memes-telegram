@@ -287,9 +287,7 @@ class TelegramBot:
 
         message = "*Bot started!*"
         for chat_id in self._settings["admins"]:
-            await context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-            )
+            await context.bot.send_message(chat_id=chat_id, text=message)
 
         next_post, next_preload = self._getNextTimestamps()
         logging.info(f"Next post: {next_post}, next preload: {next_preload}")
@@ -439,9 +437,7 @@ class TelegramBot:
         message = "*ERROR RAISED*"
         # admin message
         for chat_id in self._settings["admins"]:
-            await context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-            )
+            await context.bot.send_message(chat_id=chat_id, text=message)
 
         error_string = str(context.error)
         time_string = datetime.now().isoformat(sep=" ")
@@ -469,9 +465,7 @@ class TelegramBot:
             f"_Join us at_ {self._settings['channel_name']}"
         )
 
-        await context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-        )
+        await context.bot.send_message(chat_id=chat_id, text=message)
 
     async def _botResetCommand(self, update, context) -> None:
         """Reset command handler."""
@@ -480,17 +474,13 @@ class TelegramBot:
         if self._isAdmin(chat_id):
             message = "_Resetting..._"
 
-            await context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-            )
+            await context.bot.send_message(chat_id=chat_id, text=message)
 
             logging.warning("Resetting...")
             os.execl(sys.executable, sys.executable, *sys.argv)
         else:
             message = "*This command is for admins only*"
-            await context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-            )
+            await context.bot.send_message(chat_id=chat_id, text=message)
 
     async def _botStopCommand(self, update, context) -> None:
         """Stop command handler."""
@@ -498,17 +488,13 @@ class TelegramBot:
 
         if self._isAdmin(chat_id):
             message = "_Bot stopped_"
-            await context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-            )
+            await context.bot.send_message(chat_id=chat_id, text=message)
             self._updater.stop()
             logging.warning("Bot stopped.")
             os._exit()
         else:
             message = "*This command is for admins only*"
-            await context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-            )
+            await context.bot.send_message(chat_id=chat_id, text=message)
 
     async def _botStatusCommand(self, update, context) -> None:
         """Status command handler."""
@@ -531,9 +517,7 @@ class TelegramBot:
         else:
             message = "*This command is for admins only*"
 
-        await context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-        )
+        await context.bot.send_message(chat_id=chat_id, text=message)
 
     async def _botNextpostCommand(self, update, context) -> None:
         """Nextpost command handler."""
@@ -551,9 +535,7 @@ class TelegramBot:
         else:
             message = "*This command is for admins only*"
 
-        await context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-        )
+        await context.bot.send_message(chat_id=chat_id, text=message)
 
     async def _botQueueCommand(self, update, context) -> None:
         """Queue command handler."""
@@ -616,7 +598,6 @@ class TelegramBot:
         await context.bot.send_message(
             chat_id=chat_id,
             text=message,
-            parse_mode=constants.ParseMode.MARKDOWN,
         )
 
     async def _botCleanqueueCommand(self, update, context) -> None:
@@ -629,9 +610,7 @@ class TelegramBot:
         else:
             message = "*This command is for admins only*"
 
-        await context.bot.send_message(
-            chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-        )
+        await context.bot.send_message(chat_id=chat_id, text=message)
 
     async def _botPingCommand(self, update, context) -> None:
         """
@@ -648,7 +627,6 @@ class TelegramBot:
         await context.bot.send_message(
             chat_id=chat_id,
             text=message,
-            parse_mode=constants.ParseMode.MARKDOWN,
         )
 
     def start(self) -> None:
@@ -670,6 +648,7 @@ class TelegramBot:
                 Defaults(
                     tzinfo=pytz.timezone(self._settings["timezone"]),
                     disable_web_page_preview=True,
+                    parse_mode=constants.ParseMode.MARKDOWN,
                 )
             )
             .pool_timeout(10)
