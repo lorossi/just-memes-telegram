@@ -6,7 +6,7 @@ ImageHash==4.3.1
 Pillow==9.4.0
 pymongo==4.2.0
 pytesseract==0.3.10
-python-telegram-bot[job-queue]==20.1
+python-telegram-bot[job-queue]==20.2
 pytz==2022.2.1
 requests==2.28.2
 ujson==5.4.0
