@@ -18,7 +18,7 @@ from .data import Fingerprint
 class Fingerprinter:
     """Class handling data (Videos and Images) fingerprinting."""
 
-    _settings_path: str
+    _settings_path: str = "settings/settings.json"
     _settings: dict[str, Any]
 
     def __init__(self) -> Fingerprinter:
