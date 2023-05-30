@@ -103,6 +103,7 @@ class Reddit:
 
         posts = await self._loadPosts()
         logging.info(f"{len(posts)} posts loaded.")
+        return posts
 
     @property
     def subreddits(self) -> str:
