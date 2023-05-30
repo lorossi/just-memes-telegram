@@ -48,6 +48,8 @@ class TelegramBot:
     def __init__(self) -> TelegramBot:
         """Initialize the bot. Settings are automatically loaded."""
         self._queue = []
+        self._send_memes_job = None
+        self._preload_memes_job = None
 
         self._loadSettings()
 
