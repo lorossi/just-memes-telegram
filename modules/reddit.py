@@ -14,7 +14,7 @@ from .data import Post
 class Reddit:
     """Class handling reddit interface."""
 
-    _settings_path: str
+    _settings_path: str = "settings/settings.json"
     _settings: dict[str, Any]
 
     def __init__(self) -> Reddit:
