@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 from time import time
+from typing import Any
 
-import pymongo
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
+
 import ujson
 from imagehash import hex_to_hash
 
@@ -13,11 +16,13 @@ from .data import Fingerprint, Post
 class Database:
     """Class to interface to MongoDB database."""
 
-    _client: pymongo.MongoClient = None
+    _settings_path: str = "settings/settings.json"
+
+    _settings: dict[str, Any]
+    _client: MongoClient
 
     def __init__(self) -> Database:
         """Initialize the database object."""
-        self._settings_path = "settings/settings.json"
         self._loadSettings()
         self._connect()
 
@@ -28,7 +33,7 @@ class Database:
 
     def _connect(self):
         """Create client and connects to MongoDB database. Url is loaded from file."""
-        self._client = pymongo.MongoClient(self._settings["mongodb_url"])
+        self._client = MongoClient(self._settings["mongodb_url"])
         self._db = self._client[self._settings["database_name"]]
 
     def _savePostData(self, post: Post):
@@ -48,7 +53,7 @@ class Database:
         self._db["fingerprints"].insert_one(fingerprint.serialize())
 
     def getOldIds(self) -> set[str]:
-        """Load old ids from database, either because their relative post \
+        """Load old ids from database, either because their relative post
             has already been discarded or posted.
 
         Returns:
@@ -57,7 +62,7 @@ class Database:
         return {x["id"] for x in self._db["posts"].find({}, projection=["id"])}
 
     def getOldUrls(self) -> set[str]:
-        """Load old urls from database, either because their relative post \
+        """Load old urls from database, either because their relative post
             has already been discarded or posted.
 
         Returns:
@@ -66,7 +71,7 @@ class Database:
         return {x["url"] for x in self._db["posts"].find({}, projection=["url"])}
 
     def getOldHashes(self) -> set[str]:
-        """Load old hashes from database, either \
+        """Load old hashes from database, either
             because their relative post was discarded or posted.
 
         Returns:
@@ -79,7 +84,7 @@ class Database:
         }
 
     def getOldCaptions(self) -> set[str]:
-        """Load old captions from database, either because \
+        """Load old captions from database, either because
             their relative post was discarded or posted.
 
         Returns:
@@ -130,7 +135,7 @@ class Database:
         try:
             self._client.server_info()
             return True
-        except pymongo.ServerSelectionTimeoutError:
+        except ConnectionFailure:
             return False
 
     @property
@@ -149,7 +154,7 @@ class Database:
         """
         try:
             return self._client.server_info()["version"]
-        except pymongo.ServerSelectionTimeoutError:
+        except ConnectionFailure:
             return None
 
     @property

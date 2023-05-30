@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from time import time
+from typing import Any
 
 import asyncpraw
 import ujson
@@ -13,9 +14,11 @@ from .data import Post
 class Reddit:
     """Class handling reddit interface."""
 
+    _settings_path: str
+    _settings: dict[str, Any]
+
     def __init__(self) -> Reddit:
         """Initialize the reddit object."""
-        self._settings_path = "settings/settings.json"
         self._loadSettings()
         self._login()
 
@@ -100,8 +103,6 @@ class Reddit:
 
         posts = await self._loadPosts()
         logging.info(f"{len(posts)} posts loaded.")
-
-        return posts
 
     @property
     def subreddits(self) -> str:

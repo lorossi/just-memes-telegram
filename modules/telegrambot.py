@@ -10,13 +10,15 @@ import pytz
 import requests
 import ujson
 from telegram import constants
-from telegram.ext import Application, CallbackContext, CommandHandler, Defaults
+from telegram.ext import Application, CallbackContext, CommandHandler, Defaults, Job
 
 from .data import Post
 from .database import Database
 from .fingerprinter import Fingerprinter
 from .mediadownloader import MediaDownloader
 from .reddit import Reddit
+
+from typing import Any
 
 
 class TelegramBot:
@@ -32,13 +34,20 @@ class TelegramBot:
     cleanqueue - cleans queue
     """
 
+    _version: str = "2.1.4.1"
+    _settings_path: str = "settings/settings.json"
+
+    _settings: dict[str, Any]
+    _queue: list[Post]
+
+    _reddit: Reddit
+    _application: Application
+    _send_memes_job: Job
+    _preload_memes_job: Job
+
     def __init__(self) -> TelegramBot:
         """Initialize the bot. Settings are automatically loaded."""
-        self._version = "2.1.4"  # current bot version
-        self._settings_path = "settings/settings.json"
         self._queue = []
-        self._send_memes_job = None
-        self._preload_memes_job = None
 
         self._loadSettings()
 
@@ -84,7 +93,7 @@ class TelegramBot:
         """Calculate seconds until next post and its timestamp.
 
         Args:
-            until_preload (int, optional): Seconds until next preload. \
+            until_preload (int, optional): Seconds until next preload.
                 If None, it's recalculated.
 
         Returns:
@@ -231,7 +240,7 @@ class TelegramBot:
         return True
 
     def _postTextValid(self, text: str) -> bool:
-        """Check if the post text is valid \
+        """Check if the post text is valid
             (and as such it does not contain blocked words).
 
         Args:

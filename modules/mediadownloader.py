@@ -59,7 +59,7 @@ class MediaDownloader:
             playlist (dict): Dict containing the playlist
 
         Returns:
-            tuple[str, str]: video stream and audio stream (if found) \
+            tuple[str, str]: video stream and audio stream (if found)
                 if download is not successful, two None strings are returned
         """
         if isinstance(playlist, list):
@@ -257,8 +257,8 @@ class MediaDownloader:
             url (str): media URL
 
         Returns:
-            tuple[str, str]: path of the downloaded media and its preview. \
-                If the media is a video, the preview is the first frame of the video. \
+            tuple[str, str]: path of the downloaded media and its preview.
+                If the media is a video, the preview is the first frame of the video.
                 If the media is an image, the preview is the image itself.
         """
         self._createTempFolder()
