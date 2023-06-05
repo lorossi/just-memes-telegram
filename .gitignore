@@ -1,7 +1,7 @@
 *.log
-*.mp4
+coverage
 .vscode
 venv
 __pycache__
 settings*.json
-temp
+tmp
