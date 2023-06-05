@@ -9,8 +9,15 @@ from datetime import datetime, time, timedelta
 import pytz
 import requests
 import ujson
-from telegram import constants
-from telegram.ext import Application, CallbackContext, CommandHandler, Defaults, Job
+from telegram import constants, Update
+from telegram.ext import (
+    Application,
+    CallbackContext,
+    CommandHandler,
+    Defaults,
+    Job,
+    Updater,
+)
 
 from .data import Post
 from .database import Database
@@ -34,22 +41,26 @@ class TelegramBot:
     cleanqueue - cleans queue
     """
 
-    _version: str = "2.1.4.1"
+    _version: str = "2.2.0"
     _settings_path: str = "settings/settings.json"
+    _running_async: bool = False
 
     _settings: dict[str, Any]
     _queue: list[Post]
 
     _reddit: Reddit
     _application: Application
+    _updater: Updater
     _send_memes_job: Job
     _preload_memes_job: Job
+    _clean_database_job: Job
 
     def __init__(self) -> TelegramBot:
         """Initialize the bot. Settings are automatically loaded."""
         self._queue = []
         self._send_memes_job = None
         self._preload_memes_job = None
+        self._clean_database_job = None
 
         self._loadSettings()
 
@@ -187,14 +198,14 @@ class TelegramBot:
             logging.error(f"Error while getting file size: {e}")
             return -1
 
-    def _filterOldPosts(self, posts: list) -> list:
+    def _filterOldPosts(self, posts: list[Post]) -> list[Post]:
         """Remove old posts from the list.
 
         Args:
-            posts (list): list of new posts
+            posts (list[Post]): list of new posts
 
         Returns:
-            list
+            list[Post]
         """
         # load old ids, hashes and urls
         old_ids = self._database.getOldIds()
@@ -260,7 +271,12 @@ class TelegramBot:
         return True
 
     def _setMemesRoutineInterval(self) -> None:
-        """Create routine to send memes."""
+        """Create routines to:
+        - send memes
+        - preload memes
+        - clean database
+        """
+
         until_preload, _ = self._calculatePreload()
         until_first, _ = self._calculateNextPost(until_preload)
         seconds_between = self._getSecondsBetweenPosts()
@@ -292,13 +308,35 @@ class TelegramBot:
             name="preload_memes",
         )
 
-    async def _botStartupRoutine(self, context: CallbackContext) -> None:
+        # then take care of clean database job
+        # remove the old job, if already set
+        if self._clean_database_job:
+            self._clean_database_job.schedule_removal()
+
+        # set new routine
+        # the time is set to midnight + a delay specified in the settings
+        seconds = self._settings["clean_time"] % 60
+        minutes = (self._settings["clean_time"] // 60) % 60
+        hours = self._settings["clean_time"] // 3600
+
+        routine_time = time(
+            hour=hours,
+            minute=minutes,
+            second=seconds,
+        )
+        self._clean_database_job = self._jobqueue.run_daily(
+            self._botCleanRoutine,
+            time=routine_time,
+            name="clean_database",
+        )
+
+    async def _botStartupRoutine(self, _: CallbackContext) -> None:
         """Send a message to admins when the bot is started."""
         logging.info("Starting startup routine...")
 
         message = "*Bot started!*"
         for chat_id in self._settings["admins"]:
-            await context.bot.send_message(chat_id=chat_id, text=message)
+            await self._application.bot.send_message(chat_id=chat_id, text=message)
 
         next_post, next_preload = self._getNextTimestamps()
         logging.info(f"Next post: {next_post}, next preload: {next_preload}")
@@ -319,6 +357,19 @@ class TelegramBot:
         self._downloader.cleanTempFolder()
 
         logging.info("Clear database routine completed.")
+
+    async def _postStopRoutine(self) -> None:
+        """Send a message to admins when the bot is stopped."""
+        logging.info("Starting post stop routine...")
+
+        message = "*Bot stopped!*"
+        for chat_id in self._settings["admins"]:
+            await self._application.bot.send_message(chat_id=chat_id, text=message)
+
+        # clean the temp folder
+        self._downloader.cleanTempFolder()
+
+        logging.info("Post stop routine completed.")
 
     async def _botPreloadmemeRoutine(self, _: CallbackContext) -> None:
         """Routine that preloads memes and puts them into queue."""
@@ -370,11 +421,12 @@ class TelegramBot:
             post_path, preview_path = self._downloader.downloadMedia(post.url)
             # no path = the download failed, continue
             if not post_path:
+                logging.info(f"Skipping. Cannot download media: {post.url}")
                 continue
 
             # fingerprint the post
             fingerprint = self._fingerprinter.fingerprint(
-                path=preview_path, url=post.url
+                img_path=preview_path, img_url=post.url
             )
 
             # sometimes images cannot be fingerprinted.
@@ -415,7 +467,7 @@ class TelegramBot:
 
         logging.info("Preload memes routine completed.")
 
-    async def _botSendmemeRoutine(self, context: CallbackContext) -> None:
+    async def _botSendmemeRoutine(self, _: CallbackContext) -> None:
         """Routine that send memes when it's time to do so."""
         logging.info("Sending memes routine begins.")
 
@@ -427,28 +479,30 @@ class TelegramBot:
         channel_name = self._settings["channel_name"]
         caption = self._settings["caption"]
         post = self._queue.pop(0)
+        # load the media
+        media = open(post.path, "rb")
 
         if post.video:
             logging.info(f"Sending video with path: {post.path}")
-            await context.bot.send_video(
-                chat_id=channel_name, video=open(post.path, "rb"), caption=caption
+            await self._application.bot.send_video(
+                chat_id=channel_name, video=media, caption=caption
             )
         else:
             logging.info(f"Sending image with path: {post.path}")
-            await context.bot.send_photo(
-                chat_id=channel_name, photo=open(post.path, "rb"), caption=caption
+            await self._application.bot.send_photo(
+                chat_id=channel_name, photo=media, caption=caption
             )
 
         self._downloader.deleteFile(post.path)
 
         logging.info("Sending memes routine completed.")
 
-    async def _botError(self, update, context) -> None:
+    async def _botError(self, update: Update, context: CallbackContext) -> None:
         """Send a message to admins whenever an error is raised."""
         message = "*ERROR RAISED*"
         # admin message
         for chat_id in self._settings["admins"]:
-            await context.bot.send_message(chat_id=chat_id, text=message)
+            await self._application.bot.send_message(chat_id=chat_id, text=message)
 
         error_string = str(context.error)
         time_string = datetime.now().isoformat(sep=" ")
@@ -460,13 +514,13 @@ class TelegramBot:
         )
 
         for chat_id in self._settings["admins"]:
-            await context.bot.send_message(chat_id=chat_id, text=message)
+            await self._application.bot.send_message(chat_id=chat_id, text=message)
 
         # logs to file
         logging.error(f"Update {update} caused error {context.error}.")
 
     # Bot commands
-    async def _botStartCommand(self, update, context) -> None:
+    async def _botStartCommand(self, update: Update, context: CallbackContext) -> None:
         """Start command handler."""
         chat_id = update.effective_chat.id
 
@@ -478,7 +532,7 @@ class TelegramBot:
 
         await context.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botResetCommand(self, update, context) -> None:
+    async def _botResetCommand(self, update: Update, context: CallbackContext) -> None:
         """Reset command handler."""
         chat_id = update.effective_chat.id
 
@@ -493,7 +547,7 @@ class TelegramBot:
             message = "*This command is for admins only*"
             await context.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botStopCommand(self, update, context) -> None:
+    async def _botStopCommand(self, update: Update, context: CallbackContext) -> None:
         """Stop command handler."""
         chat_id = update.effective_chat.id
 
@@ -507,7 +561,7 @@ class TelegramBot:
             message = "*This command is for admins only*"
             await context.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botStatusCommand(self, update, context) -> None:
+    async def _botStatusCommand(self, update: Update, context: CallbackContext) -> None:
         """Status command handler."""
         chat_id = update.effective_chat.id
 
@@ -530,7 +584,9 @@ class TelegramBot:
 
         await context.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botNextpostCommand(self, update, context) -> None:
+    async def _botNextpostCommand(
+        self, update: Update, context: CallbackContext
+    ) -> None:
         """Nextpost command handler."""
         chat_id = update.effective_chat.id
 
@@ -548,70 +604,94 @@ class TelegramBot:
 
         await context.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botQueueCommand(self, update, context) -> None:
+    async def _botQueueCommand(self, update: Update, context: CallbackContext) -> None:
         """Queue command handler."""
+        logging.info("Queue command received.")
         chat_id = update.effective_chat.id
 
-        if self._isAdmin(chat_id):
-            # check if any arg has been passed
-            if len(context.args) == 0:
-                if len(self._queue) > 0:
-                    readable_queue = "\n".join([str(p) for p in self._queue])
-
-                    message = f"_Current message queue:_\n" f"{readable_queue}"
-                else:
-                    message = (
-                        "*The queue is empty*\n"
-                        "_Pass the links as argument to set them_"
-                    )
-            else:
-                image_count = 0
-                for url in context.args:
-                    # fingerprint it and add it to database
-                    post = Post(
-                        url=url,
-                        video=self._downloader.isVideo(url),
-                    )
-
-                    post_path, preview_path = self._downloader.downloadMedia(post.url)
-
-                    if not post_path:
-                        continue
-
-                    fingerprint = self._fingerprinter.fingerprint(
-                        path=preview_path, url=post.url
-                    )
-
-                    # sometimes images cannot be fingerprinted
-                    # if that happens, just skip it
-                    if not fingerprint:
-                        continue
-
-                    # save the path of the file
-                    post.setPath(post_path)
-                    # update database
-                    self._database.addData(post=post, fingerprint=fingerprint)
-                    # add it to queue
-                    self._queue.append(post)
-                    # count as added
-                    image_count += 1
-
-                # wacky english
-                plural = "s" if image_count > 1 else ""
-
-                message = (
-                    f"{image_count} _Image{plural} added to queue_\n"
-                    "_Use /queue to check the current queue_"
-                )
-        else:
+        if not self._isAdmin(chat_id):
             message = "*This command is for admins only*"
+            await context.bot.send_message(chat_id=chat_id, text=message)
+            return
+
+        # check if any arg has been passed
+        if len(context.args) == 0:
+            # no args, pass the queue
+            if len(self._queue) > 0:
+                # at least one post in queue
+                readable_queue = "\n".join([str(p) for p in self._queue])
+                message = f"_Current message queue:_\n" f"{readable_queue}"
+            else:
+                # queue is empty
+                message = (
+                    "*The queue is empty*\n" "_Pass the links as argument to set them_"
+                )
+
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+            )
+            return
+
+        image_count = 0
+        for url in context.args:
+            logging.info(f"Adding url to queue: {url}")
+            # fingerprint it and add it to database
+            post = Post(
+                url=url,
+                video=self._downloader.isVideo(url),
+            )
+
+            # download the media
+            post_path, preview_path = self._downloader.downloadMedia(post.url)
+            # no path = the download failed, raise error
+            if not post_path:
+                logging.error(f"Cannot download media: {post.url}")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"Cannot download media: {post.url}",
+                )
+                continue
+
+            fingerprint = self._fingerprinter.fingerprint(
+                img_path=preview_path, img_url=post.url
+            )
+
+            # sometimes images cannot be fingerprinted
+            # if that happens, just skip it
+            if not fingerprint:
+                logging.warning(f"Cannot fingerprint media: {post.url}")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"Cannot fingerprint media: {post.url}",
+                )
+                continue
+
+            # save the path of the file
+            post.setPath(post_path)
+            # update database
+            self._database.addData(post=post, fingerprint=fingerprint)
+            # add it to queue
+            self._queue.append(post)
+            # count as added
+            image_count += 1
+            logging.info(f"Added url to queue: {url}")
+
+        # wacky english
+        plural = "" if image_count == 1 else "s"
+        message = (
+            f"{image_count} _Image{plural} added to queue_\n"
+            "_Use /queue to check the current queue_"
+        )
 
         await context.bot.send_message(
             chat_id=chat_id,
             text=message,
         )
 
-    async def _botCleanqueueCommand(self, update, context) -> None:
+    async def _botCleanqueueCommand(
+        self, update: Update, context: CallbackContext
+    ) -> None:
         """Cleanqueue command handler."""
         chat_id = update.effective_chat.id
 
@@ -623,7 +703,7 @@ class TelegramBot:
 
         await context.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botPingCommand(self, update, context) -> None:
+    async def _botPingCommand(self, update: Update, context: CallbackContext) -> None:
         """
         Ping command handler.
 
@@ -640,8 +720,8 @@ class TelegramBot:
             text=message,
         )
 
-    def start(self) -> None:
-        """Start the bot and initialize all its components."""
+    def _setupApplication(self) -> None:
+        """Initialise all the components of the bot."""
         # create instances
         self._reddit = Reddit()
         self._database = Database()
@@ -668,16 +748,10 @@ class TelegramBot:
             .build()
         )
         self._jobqueue = self._application.job_queue
+        self._updater = self._application.updater
 
         # this routine will notify the admins
         self._jobqueue.run_once(self._botStartupRoutine, when=1, name="startup_routine")
-
-        # this routine will clean the posted list
-        self._jobqueue.run_daily(
-            self._botCleanRoutine,
-            time(0, 15, 0, 000000),
-            name="new_day_routine",
-        )
 
         # init Routines
         self._setMemesRoutineInterval()
@@ -701,15 +775,45 @@ class TelegramBot:
         #   wrong during the execution
         self._application.add_error_handler(self._botError)
 
+    def start(self) -> None:
         logging.info("Bot running.")
+        self._setupApplication()
         self._application.run_polling()
+        self._running_async = False
+
+    async def startAsync(self) -> None:
+        logging.info("Starting bot in async mode...")
+        self._setupApplication()
+        await self._application.initialize()
+        await self._updater.start_polling()
+        await self._application.start()
+        self._application.post_stop = self._postStopRoutine
+        self._running_async = True
+        logging.info("Bot running in async mode.")
+
+    async def stopAsync(self) -> None:
+        """Stop the bot."""
+        logging.info("Stopping bot...")
+        if not self._running_async:
+            raise RuntimeError("Bot is not running.")
+
+        await self._updater.stop()
+        await self._application.stop()
+        await self._application.shutdown()
+
+        logging.info("Bot stopped.")
 
     @property
-    def words_to_skip(self) -> str:
+    def words_to_skip(self) -> list[str]:
         """Return the words to skip in the posts fingerprints."""
-        return " ".join(sorted([s.lower() for s in self._settings["words_to_skip"]]))
+        return sorted(s.lower() for s in self._settings["words_to_skip"])
 
-    def __str__(self) -> str:
+    @property
+    def words_to_skip_str(self) -> str:
+        """Return the words to skip in the posts fingerprints."""
+        return ", ".join(self.words_to_skip)
+
+    def __repr__(self) -> str:
         """Return the bot's string representation."""
         post_timestamp, preload_timestamp = self._getNextTimestamps()
         ocr = "enabled" if self._settings["ocr"] else "off"
@@ -728,6 +832,10 @@ class TelegramBot:
                 f"hash threshold: {self._settings['hash_threshold']}",
                 f"max gif size: {self._settings['max_gif_size']} MB",
                 f"ocr: {ocr}",
-                f"words to skip: {self.words_to_skip}",
+                f"words to skip: {self.words_to_skip_str}",
             ]
         )
+
+    def __str__(self) -> str:
+        """Return the bot's string representation."""
+        return self.__repr__()

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from os import listdir, makedirs, path, remove
 from subprocess import PIPE, run
 from time import time
@@ -10,14 +11,17 @@ import ffmpeg
 import requests
 import ujson
 import xmltodict
+from PIL import Image
 
 
 class MediaDownloader:
     """Reddit Downloader class."""
 
+    _settings_path = "settings/settings.json"
+    _imgur_removed_url = "https://i.imgur.com/removed.png"
+
     def __init__(self) -> MediaDownloader:
         """Initialize the class."""
-        self._settings_path = "settings/settings.json"
         self._loadSettings()
         self._createTempFolder()
 
@@ -26,12 +30,10 @@ class MediaDownloader:
         with open(self._settings_path) as json_file:
             self._settings = ujson.load(json_file)["VideoDownloader"]
 
-        self._gif_extensions = [".gif"]
-        self._video_extensions = ["v.redd.it"]
-        self._image_extensions = [".jpg", ".jpeg", ".png"]
-
-        self._temp_folder = self._settings["temp_folder"]
-        self._preview_path = self._settings["temp_folder"] + "/preview.png"
+        self._gif_regex = r"^.*\.gif$"
+        self._gifv_regex = r"^.*\.gifv$"
+        self._video_regex = r"^.*(\.mp4)|(v\.redd\.it.*)$"
+        self._image_regex = r"^.*\.(png)|(jpg)|(jpeg)$"
 
     def _createTempFolder(self) -> None:
         """Create a temporary folder. Path is created according to settings."""
@@ -39,17 +41,21 @@ class MediaDownloader:
             logging.info("Creating folder.")
             makedirs(self._settings["temp_folder"])
 
-    def _generateFilename(self, extension: str) -> str:
+    def _generateFilename(self, extension: str, preview: bool = False) -> str:
         """Generate a filename from a type and an extension.
 
         Args:
             extension (str): file extension
+            preview (bool, optional): True if the file is a preview, False otherwise
 
         Returns:
             str: file path complete with folder
         """
-        timestamp = int(time() * 1e6)
-        return f"{self._temp_folder}/{timestamp}.{extension}"
+        timestamp = str(int(time() * 1e6))
+        if preview:
+            timestamp += "-preview"
+        temp_folder = self._settings["temp_folder"]
+        return f"{temp_folder}/{timestamp}.{extension}"
 
     def _extractLinksFromPlaylist(self, url: str, playlist: dict) -> tuple[str, str]:
         """Extract video and audio (if available) link from playlist and base url.
@@ -96,44 +102,79 @@ class MediaDownloader:
 
         return (video_url, audio_url)
 
-    def _downloadContent(self, url: str, path: str = None) -> str:
-        """Download content by its url and return its path.
-
-        Args:
-            url (str): content url
-            path (str, optional): path to save the content
-
-        Returns:
-            str: content path if download is successful, None otherwise
-        """
+    def _downloadImage(self, url: str, path: str = None) -> tuple[str, str]:
         if not path:
             path = self._generateFilename("png")
 
+        downloaded_path, preview_path = self._downloadContent(url, path)
+        if downloaded_path is None:
+            return None, None
+
+        self._convertImage(downloaded_path)
+        return downloaded_path, preview_path
+
+    def _downloadContent(self, url: str, path: str) -> tuple[str, str]:
+        """Download an image or a video by its url and return its path.
+
+        Args:
+            url (str): content url
+            path (str): path to save the content
+
+        Returns:
+            tuple[str, str]: path of the downloaded content and its preview.
+        """
+
+        r = requests.get(url)
+        if r.status_code != 200:
+            logging.error(f"Cannot download image. Status code: {r.status_code}")
+            return None, None
+        if r.url == self._imgur_removed_url:
+            logging.error("Image has been removed.")
+            return None, None
+
         try:
             with open(path, "wb") as f:
-                f.write(requests.get(url).content)
-                return path
+                f.write(r.content)
+
+            return path, None
         except Exception as e:
             logging.error(f"Error while downloading media. Error: {e}.")
-            return None
+            return None, None
 
-    def _extractFirstFrame(self, path: str) -> bool:
+    def _convertImage(self, path: str) -> None:
+        """Convert an image to png.
+
+        Args:
+            path (str): path of the image to convert
+        """
+        try:
+            im = Image.open(path).convert("RGBA")
+            im.save(path, format="png")
+            im.close()
+        except Exception as e:
+            logging.error(f"Error while converting image. Error: {e}.")
+
+    def _extractFirstFrame(self, path: str) -> str | None:
         """Extract the first frame of a video or the gif.
 
         Args:
             path (str): path of the video or the gif
 
         Returns:
-            bool: True if the extraction is successful, False otherwise
+            str | None: path of the preview or None if the preview cannot be extracted
         """
         try:
-            ffmpeg.input(path).output(
-                self._preview_path, vframes=1
-            ).overwrite_output().run(quiet=True)
-            return True
+            output_path = self._generateFilename("png", preview=True)
+            # create the preview
+            ffmpeg.input(path).output(output_path, vframes=1).overwrite_output().run(
+                quiet=True
+            )
+            # convert the preview to png
+            self._convertImage(output_path)
+            return output_path
         except Exception as e:
             logging.error(f"Error while extracting first frame. Error: {e}.")
-            return False
+            return None
 
     def _downloadVReddit(self, url: str) -> tuple[str, str]:
         """Download a video from v.redd.it by its url.
@@ -150,6 +191,7 @@ class MediaDownloader:
 
         logging.info(f"Status code: {r.status_code}")
         if r.status_code != 200:
+            logging.error(f"Cannot download video. Status code: {r.status_code}")
             return
 
         # load playlist
@@ -178,20 +220,20 @@ class MediaDownloader:
                     video_path
                 ).overwrite_output().run(quiet=True)
                 # remove old files
-                remove(audio_part_path)
-                remove(video_part_path)
+                self.deleteFile(audio_part_path)
+                self.deleteFile(video_part_path)
             except ffmpeg.Error as e:
                 logging.error(
                     "Error in FFMPEG while concatenating audio and video. "
                     f"Error: {e.stderr}"
                 )
-                remove(audio_part_path)
-                remove(video_part_path)
+                self.deleteFile(audio_part_path)
+                self.deleteFile(video_part_path)
                 return None, None
             except Exception as e:
                 logging.error(f"Error while concatenating video. Error: {e}")
-                remove(audio_part_path)
-                remove(video_part_path)
+                self.deleteFile(audio_part_path)
+                self.deleteFile(video_part_path)
                 return None, None
 
         else:
@@ -200,8 +242,9 @@ class MediaDownloader:
             self._downloadContent(video_url, video_path)
 
         # extract first frame
-        if self._extractFirstFrame(video_path):
-            return video_path, self._preview_path
+        preview_path = self._extractFirstFrame(video_path)
+        if preview_path is not None:
+            return video_path, preview_path
 
         return None, None
 
@@ -234,21 +277,56 @@ class MediaDownloader:
             logging.error(
                 f"Error in FFMPEG while converting video to GIF. Error: {e.stderr}"
             )
-            remove(gif_path)
+            self.deleteFile(gif_path)
             return None, None
         except Exception as e:
             logging.error(f"Error while converting video to GIF. Error: {e}")
-            remove(gif_path)
+            self.deleteFile(gif_path)
             return None, None
 
         # remove old file
-        remove(gif_path)
+        self.deleteFile(gif_path)
 
         # extract first frame
-        if self._extractFirstFrame(video_path):
-            return video_path, self._preview_path
+        preview_path = self._extractFirstFrame(video_path)
+        if preview_path is not None:
+            return video_path, preview_path
 
         return None, None
+
+    def _downloadGifv(self, gifv_url: str) -> tuple[str, str]:
+        """Download a gifv from the url.
+
+        Args:
+            gifv_url (str): url of the gifv
+
+        Returns:
+            tuple[str, str]: path of gifv and preview path
+        """
+        logging.info(f"Downloading gifv from {gifv_url}")
+        gifv_url = gifv_url.replace(".gifv", ".mp4")
+        gifv_path = self._generateFilename("mp4")
+        self._downloadContent(gifv_url, gifv_path)
+
+        # extract first frame
+        preview_path = self._extractFirstFrame(gifv_path)
+        if preview_path is not None:
+            return gifv_path, preview_path
+
+        return None, None
+
+    def _matchExtension(self, regex: str, url: str) -> bool:
+        """Check if the url matches the given regex.
+
+        Args:
+            regex (str): regex to match
+            url (str): url to check
+
+        Returns:
+            bool: True if the url matches the regex, False otherwise
+        """
+        groups = re.search(regex, url)
+        return groups is not None
 
     def downloadMedia(self, url: str) -> tuple[str, str]:
         """Download a media (either a video from v.redd.it, an image or a gif).
@@ -265,23 +343,20 @@ class MediaDownloader:
 
         logging.info(f"Attempting to download media from {url}.")
 
-        if any(ext in url for ext in self._gif_extensions):
-            gif_path, preview_path = self._downloadGif(url)
-            if gif_path:
-                logging.info(f"Downloading completed. Path: {gif_path}")
-                return gif_path, self._preview_path
+        methods_map = {
+            self._downloadGifv: self._gifv_regex,
+            self._downloadGif: self._gif_regex,
+            self._downloadVReddit: self._video_regex,
+            self._downloadImage: self._image_regex,
+        }
 
-        if any(ext in url for ext in self._video_extensions):
-            video_path, preview_path = self._downloadVReddit(url)
-            if video_path:
-                logging.info(f"Downloading complete. Path: {video_path}.")
-                return video_path, preview_path
-
-        if any(ext in url for ext in self._image_extensions):
-            image_path = self._downloadContent(url)
-            if image_path:
-                logging.info(f"Downloading complete. Path: {image_path}.")
-                return image_path, image_path
+        for method, regex in methods_map.items():
+            if self._matchExtension(regex, url):
+                path, preview_path = method(url)
+                if path is not None:
+                    logging.info(f"Downloading completed. Path: {path}")
+                    return path, preview_path
+                break
 
         logging.error("Cannot download. Aborting")
         return None, None
@@ -294,17 +369,18 @@ class MediaDownloader:
         """
         logging.info(f"Deleting file {path}.")
         try:
-            remove(path)
+            remove(path=path)
         except FileNotFoundError:
-            logging.info(f"File {path} not found.")
+            logging.warning(f"File {path} not found.")
         except Exception as e:
             logging.error(f"Error while deleting file {path}. Error: {e}")
 
     def cleanTempFolder(self) -> None:
         """Delete all files in the temp folder."""
         logging.info("Cleaning temp folder.")
-        for file in listdir(self._temp_folder):
-            self.deleteFile(f"{self._temp_folder}/{file}")
+        temp_folder = self._settings["temp_folder"]
+        for file in listdir(temp_folder):
+            self.deleteFile(f"{temp_folder}/{file}")
 
     def isVideo(self, url: str) -> bool:
         """Check if the given URL is a video.
@@ -315,7 +391,10 @@ class MediaDownloader:
         Returns:
             bool
         """
-        return any(ext in url for ext in self._video_extensions + self._gif_extensions)
+        return any(
+            self._matchExtension(regex, url)
+            for regex in [self._video_regex, self._gif_regex, self._gifv_regex]
+        )
 
     @property
     def ffmpeg_version(self) -> str:
@@ -323,17 +402,23 @@ class MediaDownloader:
         result = run(["ffmpeg", "-version"], stdout=PIPE, stderr=PIPE).stdout.decode(
             "utf-8"
         )
-        return result.split("\n")[0].split("version ")[1].split(" ")[0]
+        first_line = result.split("\n")[0]
+        version = re.search(r"(\d+(\.\d+)+)", first_line).group(0)
+        return version
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         """Return string representation of object."""
         return "\n\t· ".join(
             [
                 f"{self.__class__.__name__}:",
                 f"temp folder: {self._settings['temp_folder']}",
-                f"gif extensions: {self._gif_extensions}",
-                f"video extensions: {self._video_extensions}",
-                f"image extensions: {self._image_extensions}",
+                f"gif extensions: {self._gif_regex}",
+                f"video extensions: {self._video_regex}",
+                f"image extensions: {self._image_regex}",
                 f"ffmpeg version: {self.ffmpeg_version}",
             ]
         )
+
+    def __str__(self) -> str:
+        """Return string representation of object."""
+        return self.__repr__()

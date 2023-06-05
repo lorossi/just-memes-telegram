@@ -1,8 +1,9 @@
 """Class handling Fingerprints and Posts, with the ability to be serialized."""
-
-
 from dataclasses import asdict, dataclass
 from time import time
+from typing import Any
+
+from imagehash import ImageHash
 
 
 @dataclass
@@ -15,7 +16,8 @@ class GenericData:
 
     def __str__(self) -> str:
         """To string dunder method."""
-        return " - ".join([f"{k}: {v}" for k, v in self.serialize().items()])
+        dict_str = ", ".join([f"{k}={v}" for k, v in self.serialize().items()])
+        return f"{self.__class__.__name__}({dict_str})"
 
 
 @dataclass
@@ -23,12 +25,12 @@ class Fingerprint(GenericData):
     """FingerPrint class."""
 
     caption: str
-    hash: list
+    hash: ImageHash
     hash_str: str
     url: str
     timestamp: float = time()
 
-    def serialize(self):
+    def serialize(self) -> dict[str, Any]:
         """Serialize the object to a dictionary."""
         d = asdict(self)
         del d["hash"]

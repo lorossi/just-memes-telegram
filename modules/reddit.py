@@ -1,6 +1,7 @@
 """Class handling reddit interface."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from time import time
 from typing import Any
@@ -56,7 +57,6 @@ class Reddit:
             [int]: [number of posts loaded]
         """
         # Loads new posts
-        timestamp = time()
         posts = []
 
         subreddits = await self.reddit.subreddit("+".join(self._settings["subreddits"]))
@@ -82,7 +82,7 @@ class Reddit:
                     subreddit=subreddits,
                     title=title,
                     score=score,
-                    timestamp=timestamp,
+                    timestamp=time(),
                     video=is_video,
                 )
             )
@@ -94,7 +94,7 @@ class Reddit:
         return sorted(posts, key=lambda x: x.score, reverse=True)
 
     async def fetch(self) -> list[Post]:
-        """Fetch posts from Reddit.
+        """Fetch posts asynchronously from Reddit.
 
         Returns:
             list[Post]: list of posts
@@ -103,29 +103,29 @@ class Reddit:
 
         posts = await self._loadPosts()
         logging.info(f"{len(posts)} posts loaded.")
+
         return posts
 
     @property
-    def subreddits(self) -> str:
+    def subreddits(self) -> list[str]:
         """Get list of subreddits."""
-        return " ".join(sorted([r.lower() for r in self._settings["subreddits"]]))
-
-    @subreddits.setter
-    def subreddits(self, subreddits: list[str]):
-        self._settings["subreddits"] = [r for r in subreddits]
-        self._saveSettings()
+        return sorted([r.lower() for r in self._settings["subreddits"]])
 
     @property
-    def settings(self) -> dict:
-        """Get settings."""
-        return self._settings
+    def subreddits_str(self) -> str:
+        """Get list of subreddits as a string."""
+        return " ".join(self.subreddits)
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         """Get string representation of object."""
         return "\n\t· ".join(
             [
                 f"{self.__class__.__name__}:",
                 f"requests: {self._settings['request_limit']}",
-                f"subreddits: {self.subreddits}",
+                f"subreddits: {self.subreddits_str}",
             ]
         )
+
+    def __str__(self) -> str:
+        """Get string representation of object."""
+        return self.__repr__()

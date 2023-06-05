@@ -47,12 +47,12 @@ class Fingerprinter:
 
         return "".join([c if c in printable else "" for c in clean])
 
-    def fingerprint(self, url, path=None, hash=True, ocr=True) -> Fingerprint:
+    def fingerprint(self, img_url, img_path=None, hash=True, ocr=True) -> Fingerprint:
         """Fingerprint an image by providing its url.
 
         Args:
-            url (string): Image URL
-            path (string, optional): Image path
+            img_url (string): Image URL
+            img_path (string, optional): Image path
             hash (bool, optional): Should the image be hashed?
             ocr (bool, optional): Should the image be scanned with OCR?
 
@@ -61,41 +61,50 @@ class Fingerprinter:
         """
         timestamp = time()
         try:
-            if not path:
-                logging.info(f"Attempting to download image with url: {url}.")
-                r = requests.get(url, stream=True)
+            if not img_path:
+                logging.info(f"Attempting to download image with url: {img_url}.")
+                r = requests.get(img_url, stream=True)
                 # handle spurious Content-Encoding
                 r.raw.decode_content = True
                 im = Image.open(r.raw)
             else:
-                logging.info(f"Attempting to fingerprint image with path: {path}.")
+                logging.info(f"Attempting to fingerprint image with path: {img_path}.")
                 # Open it in PIL
-                im = Image.open(path)
+                im = Image.open(img_path)
 
             # Hash it
-            hash = imagehash.phash(im) if hash else None
+            if hash:
+                img_hash = imagehash.dhash(im, hash_size=self.hash_size)
+            else:
+                img_hash = None
             # OCR it
             if ocr:
                 # remove spaces and lower
                 raw_caption = pytesseract.image_to_string(im)
-                caption = self._cleanText(raw_caption)
+                img_caption = self._cleanText(raw_caption)
+            else:
+                img_caption = None
             # close the image
             im.close()
 
         except Exception as e:
-            logging.error(f"While fingerprinting. Error: {e}.")
+            logging.error(f"Error while fingerprinting. Error: {e}.")
             return None
 
         logging.info("Fingerprinting complete.")
 
-        return Fingerprint(caption, hash, str(hash), url, timestamp)
+        return Fingerprint(img_caption, img_hash, str(img_hash), img_url, timestamp)
 
     @property
     def pytesseract_version(self) -> str:
         """Return the version of the pytesseract library."""
-        return str(pytesseract.get_tesseract_version()).split("\n")[0]
+        return pytesseract.get_tesseract_version().base_version
 
-    def __str__(self) -> str:
+    @property
+    def hash_size(self) -> int:
+        return self._settings["hash_size"]
+
+    def __repr__(self) -> str:
         """Return string representation of the Fingerprinter object."""
         return "\n\t· ".join(
             [
@@ -105,3 +114,7 @@ class Fingerprinter:
                 f"tesseract version: {self.pytesseract_version }",
             ]
         )
+
+    def __str__(self) -> str:
+        """Return string representation of the Fingerprinter object."""
+        return self.__repr__()

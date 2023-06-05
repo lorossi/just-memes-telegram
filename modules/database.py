@@ -21,7 +21,9 @@ class Database:
     _settings: dict[str, Any]
     _client: MongoClient
 
-    def __init__(self) -> Database:
+    def __init__(
+        self,
+    ) -> Database:
         """Initialize the database object."""
         self._loadSettings()
         self._connect()
@@ -125,6 +127,17 @@ class Database:
         # return number of delete documents
         return posts.deleted_count, fingerprints.deleted_count
 
+    def deleteAll(self) -> tuple[int, int]:
+        """Delete all documents from the database and return the number
+        of deleted documents.
+
+        Returns:
+            tuple[int, int]: first item is deleted posts, second is deleted fingerprints
+        """
+        posts = self._db["posts"].delete_many({})
+        fingerprints = self._db["fingerprints"].delete_many({})
+        return posts.deleted_count, fingerprints.deleted_count
+
     @property
     def is_connected(self) -> bool:
         """Return true if the client is connected to the database server.
@@ -166,7 +179,7 @@ class Database:
         """
         return tuple(self._db[x].count_documents({}) for x in ["posts", "fingerprints"])
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         """Return string representation of the database object."""
         return "\n\t· ".join(
             [
@@ -179,3 +192,6 @@ class Database:
                 f"stored fingerprints in database: {self.stored_data[1]}",
             ]
         )
+
+    def __str__(self) -> str:
+        return self.__repr__()
