@@ -1,7 +1,6 @@
 """Class handling reddit interface."""
 from __future__ import annotations
 
-import asyncio
 import logging
 from time import time
 from typing import Any
@@ -9,7 +8,7 @@ from typing import Any
 import asyncpraw
 import ujson
 
-from .data import Post
+from modules.data import Post
 
 
 class Reddit:

@@ -112,6 +112,7 @@ class Fingerprinter:
                 f"imagehash version: {imagehash.__version__}",
                 f"pytesseract version: {pytesseract.__version__}",
                 f"tesseract version: {self.pytesseract_version }",
+                f"hash size: {self.hash_size}",
             ]
         )
 

@@ -10,7 +10,7 @@ from pymongo.errors import ConnectionFailure
 import ujson
 from imagehash import hex_to_hash
 
-from .data import Fingerprint, Post
+from modules.data import Fingerprint, Post
 
 
 class Database:

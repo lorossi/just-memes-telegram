@@ -19,11 +19,11 @@ from telegram.ext import (
     Updater,
 )
 
-from .data import Post
-from .database import Database
-from .fingerprinter import Fingerprinter
-from .mediadownloader import MediaDownloader
-from .reddit import Reddit
+from modules.data import Post
+from modules.database import Database
+from modules.fingerprinter import Fingerprinter
+from modules.mediadownloader import MediaDownloader
+from modules.reddit import Reddit
 
 from typing import Any
 
