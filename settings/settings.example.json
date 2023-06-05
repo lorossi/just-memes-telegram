@@ -1,15 +1,18 @@
 {
   "VideoDownloader": {
-    "temp_folder": "temp"
+    "temp_folder": "tmp"
   },
   "Reddit": {
     "id": "",
     "token": "",
     "request_limit": 100,
-    "subreddits": [""]
+    "subreddits": [
+      ""
+    ]
   },
   "Fingerprinter": {
-    "tesseract_path": ""
+    "tesseract_path": "",
+    "hash_size": 32
   },
   "Database": {
     "mongodb_url": "",
@@ -21,7 +24,9 @@
     "token": "",
     "channel_name": "",
     "caption": "",
-    "words_to_skip": [""],
+    "words_to_skip": [
+      ""
+    ],
     "ocr": true,
     "posts_per_day": 1440,
     "hash_threshold": 10,
