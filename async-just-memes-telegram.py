@@ -1,6 +1,6 @@
+import asyncio
 import logging
 import tracemalloc
-import asyncio
 
 from modules.telegrambot import TelegramBot
 
@@ -25,7 +25,7 @@ async def main():
     )
     tracemalloc.start()
 
-    logging.info("Script started.")
+    logging.info("Script started.c")
     t = TelegramBot()
 
     logging.info("Starting bot...")
@@ -36,7 +36,10 @@ async def main():
         await idle()
     except asyncio.exceptions.CancelledError:
         logging.warning("SIGINT received. Stopping bot...")
-        await t.stopAsync()
+
+    logging.info("Stopping bot...")
+    await t.stopAsync()
+    logging.info("Bot stopped.")
 
     logging.info("Script ended.")
 
