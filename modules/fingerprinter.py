@@ -12,7 +12,7 @@ import requests
 import ujson
 from PIL import Image
 
-from .data import Fingerprint
+from modules.data import Fingerprint
 
 
 class Fingerprinter:
@@ -119,3 +119,20 @@ class Fingerprinter:
     def __str__(self) -> str:
         """Return string representation of the Fingerprinter object."""
         return self.__repr__()
+
+    @staticmethod
+    def compareHashes(hash1: imagehash.ImageHash, hash2: imagehash.ImageHash) -> float:
+        """Compare two hashes.
+
+        Args:
+            hash1 (imagehash.ImageHash)
+            hash2 (imagehash.ImageHash)
+
+        Returns:
+            float: similarity between the two hashes
+        """
+        try:
+            return abs(hash1 - hash2)
+        except Exception as e:
+            logging.error(f"Error while comparing hashes. Error: {e}.")
+            return 0.0

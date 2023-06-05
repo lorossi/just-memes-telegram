@@ -41,7 +41,7 @@ class TelegramBot:
     cleanqueue - cleans queue
     """
 
-    _version: str = "2.2.0"
+    _version: str = "2.2.0.1"
     _settings_path: str = "settings/settings.json"
     _running_async: bool = False
 
@@ -234,24 +234,6 @@ class TelegramBot:
 
         return True
 
-    def _postHashValid(self, old_hashes: set[int], fingerprint_hash: int) -> bool:
-        """Check if the post hash is valid (and as such it has been posted before).
-
-        Args:
-            old_hashes (set[int]): list of old hashed
-            fingerprint_hash (int): hash to check
-
-        Returns:
-            bool
-        """
-        if any(
-            abs(fingerprint_hash - x) < self._settings["hash_threshold"]
-            for x in old_hashes
-        ):
-            return False
-
-        return True
-
     def _postTextValid(self, text: str) -> bool:
         """Check if the post text is valid
             (and as such it does not contain blocked words).
@@ -440,7 +422,9 @@ class TelegramBot:
             self._database.addData(fingerprint=fingerprint)
 
             # check if the new post is too similar to an older one
-            if not self._postHashValid(old_hashes, fingerprint.hash):
+            if any(
+                Fingerprinter.compareHashes(fingerprint.hash, x) for x in old_hashes
+            ):
                 logging.warning(f"Skipping. Hash is too similar: {fingerprint.hash}")
                 continue
 
