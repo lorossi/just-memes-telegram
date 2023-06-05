@@ -412,9 +412,9 @@ class MediaDownloader:
             [
                 f"{self.__class__.__name__}:",
                 f"temp folder: {self._settings['temp_folder']}",
-                f"gif extensions: {self._gif_regex}",
-                f"video extensions: {self._video_regex}",
-                f"image extensions: {self._image_regex}",
+                f"gif regex: {self._gif_regex}",
+                f"video regex: {self._video_regex}",
+                f"image regex: {self._image_regex}",
                 f"ffmpeg version: {self.ffmpeg_version}",
             ]
         )
