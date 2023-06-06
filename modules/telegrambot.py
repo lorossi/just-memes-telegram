@@ -422,7 +422,9 @@ class TelegramBot:
 
             # check if the new post is too similar to an older one
             if any(
-                Fingerprinter.compareHashes(fingerprint.hash, x) for x in old_hashes
+                Fingerprinter.compareHashes(fingerprint.hash, x)
+                < self._settings["hash_threshold"]
+                for x in old_hashes
             ):
                 logging.warning(f"Skipping. Hash is too similar: {fingerprint.hash}")
                 continue
