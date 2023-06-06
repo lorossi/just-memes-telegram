@@ -1,3 +1,5 @@
 #!/bin/bash
-cd /home/pi/scripts/just-memes-telegram
-venv/bin/python3 just-memes-telegram.py &
+# change to the script directory
+cd "$( dirname "${BASH_SOURCE[0]}" )"
+# launch the script in the virtual environment
+venv/bin/python3 just-memes-telegram.py
