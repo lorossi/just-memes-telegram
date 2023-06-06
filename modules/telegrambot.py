@@ -541,7 +541,6 @@ class TelegramBot:
         if self._isAdmin(chat_id):
             message = "_Bot stopped_"
             await self._application.bot.send_message(chat_id=chat_id, text=message)
-            self._updater.stop()
             logging.warning("Bot stopped.")
             os._exit()
         else:
@@ -589,37 +588,21 @@ class TelegramBot:
 
         await self._application.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botQueueCommand(self, update: Update, context: CallbackContext) -> None:
-        """Queue command handler."""
-        logging.info("Queue command received.")
-        chat_id = update.effective_chat.id
-
-        if not self._isAdmin(chat_id):
-            message = "*This command is for admins only*"
-            await self._application.bot.send_message(chat_id=chat_id, text=message)
-            return
-
-        # check if any arg has been passed
-        if len(context.args) == 0:
-            # no args, pass the queue
-            if len(self._queue) > 0:
-                # at least one post in queue
-                readable_queue = "\n".join([str(p) for p in self._queue])
-                message = f"_Current message queue:_\n" f"{readable_queue}"
-            else:
-                # queue is empty
-                message = (
-                    "*The queue is empty*\n" "_Pass the links as argument to set them_"
-                )
-
-            await self._application.bot.send_message(
-                chat_id=chat_id,
-                text=message,
+    async def _showQueue(self, chat_id: str) -> None:
+        """Show queue to user."""
+        if len(self._queue) > 0:
+            readable_queue = "\n".join([str(p) for p in self._queue])
+            message = f"_Current message queue:_\n" f"{readable_queue}"
+        else:
+            message = (
+                "*The queue is empty*\n" "_Pass the links as argument to set them_"
             )
-            return
 
+        await self._application.bot.send_message(chat_id=chat_id, text=message)
+
+    async def _addUrlsToQueue(self, chat_id: str, urls: list[str]) -> int:
         image_count = 0
-        for url in context.args:
+        for url in urls:
             logging.info(f"Adding url to queue: {url}")
             # fingerprint it and add it to database
             post = Post(
@@ -661,6 +644,25 @@ class TelegramBot:
             # count as added
             image_count += 1
             logging.info(f"Added url to queue: {url}")
+
+        return image_count
+
+    async def _botQueueCommand(self, update: Update, context: CallbackContext) -> None:
+        """Queue command handler."""
+        logging.info("Queue command received.")
+        chat_id = update.effective_chat.id
+
+        if not self._isAdmin(chat_id):
+            message = "*This command is for admins only*"
+            await self._application.bot.send_message(chat_id=chat_id, text=message)
+            return
+
+        # if no arg has been passed, just show the queue
+        if len(context.args) == 0:
+            await self._showQueue(chat_id)
+            return
+
+        image_count = await self._addUrlsToQueue(chat_id, context.args)
 
         # wacky english
         plural = "" if image_count == 1 else "s"
