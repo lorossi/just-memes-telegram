@@ -43,7 +43,6 @@ class TelegramBot:
 
     _version: str = "2.2.0.1"
     _settings_path: str = "settings/settings.json"
-    _running_async: bool = False
 
     _settings: dict[str, Any]
     _queue: list[Post]
@@ -466,6 +465,8 @@ class TelegramBot:
         # load the media
         media = open(post.path, "rb")
 
+        logging.info("Sending post to channel...")
+
         if post.video:
             logging.info(f"Sending video with path: {post.path}")
             await self._application.bot.send_video(
@@ -476,6 +477,8 @@ class TelegramBot:
             await self._application.bot.send_photo(
                 chat_id=channel_name, photo=media, caption=caption
             )
+
+        logging.info("Post sent")
 
         self._downloader.deleteFile(post.path)
 
@@ -504,7 +507,7 @@ class TelegramBot:
         logging.error(f"Update {update} caused error {context.error}.")
 
     # Bot commands
-    async def _botStartCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botStartCommand(self, update: Update, _: CallbackContext) -> None:
         """Start command handler."""
         chat_id = update.effective_chat.id
 
@@ -514,38 +517,38 @@ class TelegramBot:
             f"_Join us at_ {self._settings['channel_name']}"
         )
 
-        await context.bot.send_message(chat_id=chat_id, text=message)
+        await self._application.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botResetCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botResetCommand(self, update: Update, _: CallbackContext) -> None:
         """Reset command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
             message = "_Resetting..._"
 
-            await context.bot.send_message(chat_id=chat_id, text=message)
+            await self._application.bot.send_message(chat_id=chat_id, text=message)
 
             logging.warning("Resetting...")
             os.execl(sys.executable, sys.executable, *sys.argv)
         else:
             message = "*This command is for admins only*"
-            await context.bot.send_message(chat_id=chat_id, text=message)
+            await self._application.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botStopCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botStopCommand(self, update: Update, _: CallbackContext) -> None:
         """Stop command handler."""
         chat_id = update.effective_chat.id
 
         if self._isAdmin(chat_id):
             message = "_Bot stopped_"
-            await context.bot.send_message(chat_id=chat_id, text=message)
+            await self._application.bot.send_message(chat_id=chat_id, text=message)
             self._updater.stop()
             logging.warning("Bot stopped.")
             os._exit()
         else:
             message = "*This command is for admins only*"
-            await context.bot.send_message(chat_id=chat_id, text=message)
+            await self._application.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botStatusCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botStatusCommand(self, update: Update, _: CallbackContext) -> None:
         """Status command handler."""
         chat_id = update.effective_chat.id
 
@@ -566,11 +569,9 @@ class TelegramBot:
         else:
             message = "*This command is for admins only*"
 
-        await context.bot.send_message(chat_id=chat_id, text=message)
+        await self._application.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botNextpostCommand(
-        self, update: Update, context: CallbackContext
-    ) -> None:
+    async def _botNextpostCommand(self, update: Update, _: CallbackContext) -> None:
         """Nextpost command handler."""
         chat_id = update.effective_chat.id
 
@@ -586,7 +587,7 @@ class TelegramBot:
         else:
             message = "*This command is for admins only*"
 
-        await context.bot.send_message(chat_id=chat_id, text=message)
+        await self._application.bot.send_message(chat_id=chat_id, text=message)
 
     async def _botQueueCommand(self, update: Update, context: CallbackContext) -> None:
         """Queue command handler."""
@@ -595,7 +596,7 @@ class TelegramBot:
 
         if not self._isAdmin(chat_id):
             message = "*This command is for admins only*"
-            await context.bot.send_message(chat_id=chat_id, text=message)
+            await self._application.bot.send_message(chat_id=chat_id, text=message)
             return
 
         # check if any arg has been passed
@@ -611,7 +612,7 @@ class TelegramBot:
                     "*The queue is empty*\n" "_Pass the links as argument to set them_"
                 )
 
-            await context.bot.send_message(
+            await self._application.bot.send_message(
                 chat_id=chat_id,
                 text=message,
             )
@@ -631,7 +632,7 @@ class TelegramBot:
             # no path = the download failed, raise error
             if not post_path:
                 logging.error(f"Cannot download media: {post.url}")
-                await context.bot.send_message(
+                await self._application.bot.send_message(
                     chat_id=chat_id,
                     text=f"Cannot download media: {post.url}",
                 )
@@ -645,7 +646,7 @@ class TelegramBot:
             # if that happens, just skip it
             if not fingerprint:
                 logging.warning(f"Cannot fingerprint media: {post.url}")
-                await context.bot.send_message(
+                await self._application.bot.send_message(
                     chat_id=chat_id,
                     text=f"Cannot fingerprint media: {post.url}",
                 )
@@ -668,14 +669,12 @@ class TelegramBot:
             "_Use /queue to check the current queue_"
         )
 
-        await context.bot.send_message(
+        await self._application.bot.send_message(
             chat_id=chat_id,
             text=message,
         )
 
-    async def _botCleanqueueCommand(
-        self, update: Update, context: CallbackContext
-    ) -> None:
+    async def _botCleanqueueCommand(self, update: Update, _: CallbackContext) -> None:
         """Cleanqueue command handler."""
         chat_id = update.effective_chat.id
 
@@ -685,9 +684,9 @@ class TelegramBot:
         else:
             message = "*This command is for admins only*"
 
-        await context.bot.send_message(chat_id=chat_id, text=message)
+        await self._application.bot.send_message(chat_id=chat_id, text=message)
 
-    async def _botPingCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botPingCommand(self, update: Update, _: CallbackContext) -> None:
         """
         Ping command handler.
 
@@ -695,11 +694,11 @@ class TelegramBot:
         All it does is reply PONG to a particular message.
         """
         chat_id = update.effective_chat.id
-        await context.bot.send_chat_action(
+        await self._application.bot.send_chat_action(
             chat_id=chat_id, action=constants.ChatAction.TYPING
         )
         message = "🏓 *PONG* 🏓"
-        await context.bot.send_message(
+        await self._application.bot.send_message(
             chat_id=chat_id,
             text=message,
         )
@@ -760,10 +759,9 @@ class TelegramBot:
         self._application.add_error_handler(self._botError)
 
     def start(self) -> None:
-        logging.info("Bot running.")
+        logging.info("Starting bot in sync mode...")
         self._setupApplication()
         self._application.run_polling()
-        self._running_async = False
 
     async def startAsync(self) -> None:
         logging.info("Starting bot in async mode...")
@@ -772,14 +770,11 @@ class TelegramBot:
         await self._updater.start_polling()
         await self._application.start()
         self._application.post_stop = self._postStopRoutine
-        self._running_async = True
         logging.info("Bot running in async mode.")
 
     async def stopAsync(self) -> None:
         """Stop the bot."""
         logging.info("Stopping bot...")
-        if not self._running_async:
-            raise RuntimeError("Bot is not running.")
 
         await self._updater.stop()
         await self._application.stop()
