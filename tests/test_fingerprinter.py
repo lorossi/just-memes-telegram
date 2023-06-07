@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import random
 import string
@@ -14,7 +13,7 @@ from modules.data import Fingerprint
 from modules.fingerprinter import Fingerprinter
 
 
-class FingerprintTest(unittest.TestCase):
+class FingerprintBaseTest:
     _tests_num: int = 100
     _img_folder: str = "tests/tmp"
     _hashes_file: str = "tests/images.json"
@@ -22,8 +21,6 @@ class FingerprintTest(unittest.TestCase):
     def setUp(self) -> None:
         # create temp folder
         os.makedirs(self._img_folder, exist_ok=True)
-        # load logger
-        self._logger = logging.getLogger(__name__)
 
     def tearDown(self) -> None:
         # delete temp folder and all its contents
@@ -80,6 +77,8 @@ class FingerprintTest(unittest.TestCase):
         with open(self._hashes_file, "w") as json_file:
             json.dump({"Hashes": hash_data}, json_file, indent=4)
 
+
+class FingerprintTest(FingerprintBaseTest, unittest.TestCase):
     def testCreation(self):
         f = Fingerprinter()
         self.assertIsInstance(f, Fingerprinter)
@@ -110,27 +109,20 @@ class FingerprintTest(unittest.TestCase):
             f.__class__.__name__ + ":" + r"\n\s*(·\s.*:\s.*\n\s*)+·\s.*:\s.*",
         )
 
-    def testFingerprint(self):
-        # necessary to test both url and path
-        self._logger.info("Creating image test cases...")
-        self._createImageTestCases()
-        self._logger.info("Done creating image test cases.")
 
+class FingerprinterAsyncTest(FingerprintBaseTest, unittest.IsolatedAsyncioTestCase):
+    async def testFingerprint(self):
+        # necessary to test both url and path
         f = Fingerprinter()
         for hash_data in self._loadImageHashes():
             hash = hash_data["hash"]
             url = hash_data["url"]
-            self._logger.info(f"Testing hash for {url}")
             path = self._downloadImage(url)
-            self._logger.info(f"Downloaded image to {path}")
             # test download and hash
-            self._logger.info("Testing hash from url...")
-            fp = f.fingerprint(img_url=url)
+            fp = await f.fingerprint(img_url=url)
             self.assertIsInstance(fp, Fingerprint)
             self.assertEqual(fp.hash_str, hash)
             # test hash from file
-            self._logger.info("Testing hash from path...")
-            fp = f.fingerprint(img_url=url, img_path=path)
+            fp = await f.fingerprint(img_url=url, img_path=path)
             self.assertIsInstance(fp, Fingerprint)
             self.assertEqual(fp.hash_str, hash)
-            self._logger.info(f"Done testing for url: {url}")

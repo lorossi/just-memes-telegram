@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytz
+import ujson
 
 from modules.database import Database
 from modules.telegrambot import TelegramBot
@@ -87,6 +89,10 @@ class TelegramAsyncBotTest(unittest.IsolatedAsyncioTestCase):
         bot._settings["admins"] = []
         return bot
 
+    def _loadFileSizes(self):
+        with open("tests/files.json") as json_file:
+            return ujson.load(json_file)["Files"]
+
     async def testCreation(self):
         bot = TelegramBot()
         self.assertIsInstance(bot, TelegramBot)
@@ -130,9 +136,9 @@ class TelegramAsyncBotTest(unittest.IsolatedAsyncioTestCase):
         ).total_seconds()
         # set the bot to send a meme an hour
         bot._settings["memes_per_day"] = 24
-        # set the bot to send a meme in 30 seconds
-        bot._settings["preload_time"] = 25
-        bot._settings["start_delay"] = int(seconds_since_midnight + 30)
+        # set the bot to send a meme in 10 seconds
+        bot._settings["preload_time"] = 5
+        bot._settings["start_delay"] = int(seconds_since_midnight + 10)
 
         # create a mock bot
         # start the bot
@@ -141,7 +147,7 @@ class TelegramAsyncBotTest(unittest.IsolatedAsyncioTestCase):
         bot._application.bot = bot_mock
 
         # wait for the bot to send the memes
-        await asyncio.sleep(35)
+        await asyncio.sleep(20)
 
         # stop the bot
         await bot.stopAsync()
@@ -183,6 +189,8 @@ class TelegramAsyncBotTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(args["chat_id"], chat_id)
             bot_mock.reset_mock()
 
+        await bot.stopAsync()
+
     async def testCommandsAdminResetStop(self):
         # patch os to avoid stopping the bot
         chat_id = 123456789
@@ -190,17 +198,6 @@ class TelegramAsyncBotTest(unittest.IsolatedAsyncioTestCase):
         context_mock = self._createMockContext()
 
         bot, bot_mock = await self._createPatchedBot()
-        # manually start the bot
-        bot._setupApplication()
-        await bot._application.initialize()
-        await bot._updater.start_polling()
-        await bot._application.start()
-        # inject the mock bot
-        bot._application.bot = bot_mock
-        # stop the routines
-        bot._preload_memes_job.schedule_removal()
-        bot._send_memes_job.schedule_removal()
-        bot._clean_database_job.schedule_removal()
         # set the admins
         bot._settings["admins"] = [chat_id]
 
@@ -221,6 +218,8 @@ class TelegramAsyncBotTest(unittest.IsolatedAsyncioTestCase):
             args = bot_mock.send_message.call_args[1]
             self.assertRegex(args["text"], self._commandRegexes["_botStopCommand"])
             os_mock._exit.assert_called_once()
+
+        await bot.stopAsync()
 
     async def testCommandsNotAdmin(self):
         chat_id = 123456789
@@ -248,3 +247,58 @@ class TelegramAsyncBotTest(unittest.IsolatedAsyncioTestCase):
             self.assertRegex(args["text"], regex)
             self.assertEqual(args["chat_id"], chat_id)
             bot_mock.reset_mock()
+
+        await bot.stopAsync()
+
+    async def testPrivateMethods(self):
+        bot, _ = await self._createPatchedBot()
+
+        posts_per_day = 24
+        preload_time = 30
+        start_delay = 0
+        seconds_between_posts = int(24 * 60 * 60 / posts_per_day)
+        admin_id = 123456789
+
+        bot._settings["posts_per_day"] = posts_per_day
+        bot._settings["preload_time"] = preload_time
+        bot._settings["start_delay"] = start_delay
+        bot._settings["admins"] = [admin_id]
+
+        # test seconds between posts
+        seconds = bot._getSecondsBetweenPosts()
+        self.assertEqual(seconds, seconds_between_posts)
+
+        # freeze time
+        now = datetime.now(tz=pytz.timezone("Europe/Rome")).replace(microsecond=0)
+
+        # test calculate preload
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        next_preload = (
+            midnight - timedelta(seconds=preload_time) + timedelta(seconds=start_delay)
+        )
+        while next_preload <= now:
+            next_preload += timedelta(seconds=seconds_between_posts)
+
+        next_post = next_preload + timedelta(seconds=preload_time)
+
+        with patch("modules.telegrambot.datetime") as datetime_mock:
+            datetime_mock.now.return_value = now
+            seconds_remaining, timestamp = bot._calculatePreload()
+            self.assertEqual(seconds_remaining, (next_preload - now).total_seconds())
+            self.assertEqual(timestamp, next_preload.isoformat(sep=" "))
+
+            seconds_remaining, timestamp = bot._calculateNextPost()
+            self.assertEqual(seconds_remaining, (next_post - now).total_seconds())
+            self.assertEqual(timestamp, next_post.isoformat(sep=" "))
+
+        # test is admin
+        self.assertTrue(bot._isAdmin(admin_id))
+        # test file size
+        for file in self._loadFileSizes():
+            url = file["url"]
+            size = file["size"]
+            calculated_size = await bot._getFileSize(url)
+            size_mb = size / 1024 / 1024
+            self.assertAlmostEqual(calculated_size, size_mb, delta=0.1)
+
+        await bot.stopAsync()

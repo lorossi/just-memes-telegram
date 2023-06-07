@@ -3,9 +3,9 @@ import shutil
 import unittest
 
 from modules.database import Database
-from modules.reddit import Reddit
 from modules.fingerprinter import Fingerprinter
 from modules.mediadownloader import MediaDownloader
+from modules.reddit import Reddit
 
 
 class RedditDatabaseIntegrationTest(unittest.IsolatedAsyncioTestCase):
@@ -71,15 +71,15 @@ class RedditDatabaseIntegrationTest(unittest.IsolatedAsyncioTestCase):
 
         for x in range(self._posts_limit):
             new_post = posts[x]
-            media_path, media_preview = downloader.downloadMedia(new_post.url)
-            new_post.path = media_path
+            download = await downloader.downloadMedia(new_post.url)
+            new_post.path = download.path
 
-            if media_preview is not None:
-                img_path = media_preview
+            if download.preview_path is not None:
+                img_path = download.preview_path
             else:
-                img_path = media_path
+                img_path = download.path
 
-            new_fingerprint = fingerprinter.fingerprint(
+            new_fingerprint = await fingerprinter.fingerprint(
                 img_url=new_post.url, img_path=img_path
             )
 

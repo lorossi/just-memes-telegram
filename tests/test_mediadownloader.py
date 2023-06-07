@@ -8,7 +8,7 @@ from PIL import Image
 from modules.mediadownloader import MediaDownloader
 
 
-class MediaDownloaderTest(unittest.TestCase):
+class MediaDownloaderBaseTest:
     _temp_folder: str = "tests/tmp"
 
     def setUp(self) -> None:
@@ -41,6 +41,8 @@ class MediaDownloaderTest(unittest.TestCase):
         extension = path.split(".")[-1].lower()
         return extension in response
 
+
+class MediaDownloaderTest(MediaDownloaderBaseTest, unittest.TestCase):
     def testCreation(self):
         downloader = MediaDownloader()
         self.assertIsInstance(downloader, MediaDownloader)
@@ -96,7 +98,11 @@ class MediaDownloaderTest(unittest.TestCase):
         # check if the temp folder is empty
         self.assertEqual(len(os.listdir(folder)), 0)
 
-    def testDownloads(self):
+
+class AsyncMediaDownloaderTest(
+    MediaDownloaderBaseTest, unittest.IsolatedAsyncioTestCase
+):
+    async def testDownloads(self):
         # posts are saved in the posts.json file
         with open("tests/posts.json", "r") as f:
             posts = json.load(f)["Posts"]
@@ -106,18 +112,18 @@ class MediaDownloaderTest(unittest.TestCase):
 
         # download all posts
         for url in posts:
-            media_path, preview_path = d.downloadMedia(url)
+            result = await d.downloadMedia(url)
             # check if the file exists
-            if preview_path is not None:
-                self.assertTrue(os.path.exists(preview_path))
-                self.assertTrue(self._checkFileFormat(preview_path))
+            if result.preview_path is not None:
+                self.assertTrue(os.path.exists(result.preview_path))
+                self.assertTrue(self._checkFileFormat(result.preview_path))
 
-            self.assertIsNotNone(media_path)
-            self.assertTrue(os.path.exists(media_path))
+            self.assertIsNotNone(result.path)
+            self.assertTrue(os.path.exists(result.path))
             # check if the file is the correct format
-            self.assertTrue(self._checkFileFormat(media_path))
+            self.assertTrue(self._checkFileFormat(result.path))
 
-    def testInvalidDownloads(self):
+    async def testInvalidDownloads(self):
         # posts are saved in the posts.json file
         with open("tests/posts.json", "r") as f:
             invalid = json.load(f)["Invalid"]
@@ -127,6 +133,9 @@ class MediaDownloaderTest(unittest.TestCase):
 
         # download all posts
         for url in invalid:
-            media_path, preview_path = d.downloadMedia(url)
-            self.assertIsNone(media_path)
-            self.assertIsNone(preview_path)
+            result = await d.downloadMedia(url)
+            self.assertIsNone(result.path)
+            self.assertIsNone(result.preview_path)
+            self.assertIsNotNone(result.error)
+            self.assertNotEqual(result.status, 200)
+            self.assertFalse(result.is_successful)
