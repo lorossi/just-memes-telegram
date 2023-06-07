@@ -6,7 +6,8 @@ import unittest
 from time import time
 
 import imagehash
-import requests
+import aiohttp
+import aiofiles
 from PIL import Image
 
 from modules.data import Fingerprint
@@ -44,15 +45,16 @@ class FingerprintBaseTest:
         valid_text = "".join(valid_list)
         return valid_text
 
-    def _downloadImage(self, url: str) -> str:
-        filename = int(time() * 10e6)
-        extension = url.split(".")[-1]
-        path = f"{self._img_folder}/{filename}.{extension}"
-        r = requests.get(url)
-        self.assertEqual(r.status_code, 200, "Failed to download image.")
-        with open(path, "wb") as f:
-            f.write(r.content)
-        return path
+    async def _request(self, url: str) -> tuple[str, int]:
+        async with aiohttp.ClientSession() as session:
+            s = await session.get(url)
+            if s.status != 200:
+                return "", s.status
+            return await s.read(), s.status
+
+    async def _writeFile(self, path: str, content: bytes) -> None:
+        async with aiofiles.open(path, "wb") as f:
+            await f.write(content)
 
     def _hashImage(self, path: str) -> imagehash.ImageHash:
         im = Image.open(path)
@@ -111,13 +113,22 @@ class FingerprintTest(FingerprintBaseTest, unittest.TestCase):
 
 
 class FingerprinterAsyncTest(FingerprintBaseTest, unittest.IsolatedAsyncioTestCase):
+    async def _downloadImage(self, url: str) -> str:
+        filename = int(time() * 10e6)
+        extension = url.split(".")[-1]
+        path = f"{self._img_folder}/{filename}.{extension}"
+        content, status = await self._request(url)
+        self.assertEqual(status, 200)
+        await self._writeFile(path, content)
+        return path
+
     async def testFingerprint(self):
         # necessary to test both url and path
         f = Fingerprinter()
         for hash_data in self._loadImageHashes():
             hash = hash_data["hash"]
             url = hash_data["url"]
-            path = self._downloadImage(url)
+            path = await self._downloadImage(url)
             # test download and hash
             fp = await f.fingerprint(img_url=url)
             self.assertIsInstance(fp, Fingerprint)
