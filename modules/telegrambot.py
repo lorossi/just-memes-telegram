@@ -5,11 +5,11 @@ import logging
 import os
 import sys
 from datetime import datetime, time, timedelta
+from typing import Any
 
 import pytz
-import requests
 import ujson
-from telegram import constants, Update
+from telegram import Update, constants
 from telegram.ext import (
     Application,
     CallbackContext,
@@ -19,13 +19,12 @@ from telegram.ext import (
     Updater,
 )
 
+from modules.common import asyncRequest
 from modules.data import Post
 from modules.database import Database
 from modules.fingerprinter import Fingerprinter
 from modules.mediadownloader import MediaDownloader
 from modules.reddit import Reddit
-
-from typing import Any
 
 
 class TelegramBot:
@@ -41,7 +40,7 @@ class TelegramBot:
     cleanqueue - cleans queue
     """
 
-    _version: str = "2.2.0.1"
+    _version: str = "2.2.1"
     _settings_path: str = "settings/settings.json"
 
     _settings: dict[str, Any]
@@ -99,7 +98,7 @@ class TelegramBot:
         Returns:
             int
         """
-        return int(24 * 60 * 60 / self._settings["posts_per_day"])
+        return int(86400 / self._settings["posts_per_day"])
 
     def _calculateNextPost(self, until_preload: int = None) -> tuple[int, str]:
         """Calculate seconds until next post and its timestamp.
@@ -121,11 +120,11 @@ class TelegramBot:
         # remove seconds and microseconds from now
         now = datetime.now().replace(microsecond=0)
         # seconds until next post
-        seconds_until = (next_preload_time + preload_time).seconds
+        seconds_until = (next_preload_time + preload_time).total_seconds()
         # calculate next post timestamp
-        next_post = now + next_preload_time + preload_time
+        next_post = (now + next_preload_time + preload_time).isoformat(sep=" ")
 
-        return seconds_until, next_post.isoformat(sep=" ")
+        return seconds_until, next_post
 
     def _calculatePreload(self) -> tuple[int, str]:
         """Calculate seconds until next preload and its timestamp.
@@ -142,17 +141,18 @@ class TelegramBot:
         seconds_delay = timedelta(seconds=self._settings["start_delay"])
         # remove seconds and microseconds from now
         now = datetime.now().replace(microsecond=0)
+        # calculate midnight
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
         # starting time
-        next_preload = (
-            datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            + seconds_delay
-            - preload_time
-        )
+        next_preload = midnight + seconds_delay - preload_time
         # loop until it's in the future
         while next_preload <= now:
             next_preload += seconds_between
 
-        return (next_preload - now).seconds, next_preload.isoformat(sep=" ")
+        seconds_remaining = (next_preload - now).total_seconds()
+        preload_timestamp = next_preload.isoformat(sep=" ")
+
+        return seconds_remaining, preload_timestamp
 
     def _getNextTimestamps(self) -> tuple[str, str]:
         """Return timestamps for next post and next preload.
@@ -179,7 +179,7 @@ class TelegramBot:
         """
         return chat_id in self._settings["admins"]
 
-    def _getFileSize(self, url: str) -> float:
+    async def _getFileSize(self, url: str) -> float:
         """Get file size (in MB) by the file's url.
 
         Args:
@@ -188,14 +188,15 @@ class TelegramBot:
         Returns:
             float
         """
-        try:
-            s = requests.get(url, stream=True, allow_redirects=True).headers[
-                "Content-length"
-            ]
-            return int(s) / (1024 * 1024)
-        except Exception as e:
-            logging.error(f"Error while getting file size: {e}")
+        request = await asyncRequest(url, download_content=False)
+        if request.status != 200:
+            logging.error(
+                f"Error while getting file size: {request.status}. " f"Url: {url}."
+            )
             return -1
+
+        size = request.headers["Content-length"]
+        return int(size) / (1024 * 1024)
 
     def _filterOldPosts(self, posts: list[Post]) -> list[Post]:
         """Remove old posts from the list.
@@ -212,7 +213,7 @@ class TelegramBot:
         # filter images that match old ids or old urls
         return [p for p in posts if p.id not in old_ids and p.url not in old_urls]
 
-    def _checkGifSize(self, url: str) -> bool:
+    async def _checkGifSize(self, url: str) -> bool:
         """Check the size of a gif.
 
         Args:
@@ -221,7 +222,7 @@ class TelegramBot:
         Returns:
             bool: False if the gif is too big
         """
-        size = self._getFileSize(url)
+        size = await self._getFileSize(url)
 
         if size > self._settings["max_gif_size"]:
             logging.warning(f"Gif size is too big: {size}MB")
@@ -395,19 +396,19 @@ class TelegramBot:
 
             # check if file is too big
             if ".gif" in post.url:
-                if not self._checkGifSize(post.url):
+                if not await self._checkGifSize(post.url):
                     continue
 
             # first of all, download the media
-            post_path, preview_path = self._downloader.downloadMedia(post.url)
+            result = await self._downloader.downloadMedia(post.url)
             # no path = the download failed, continue
-            if not post_path:
+            if not result.is_successful:
                 logging.info(f"Skipping. Cannot download media: {post.url}")
                 continue
 
             # fingerprint the post
-            fingerprint = self._fingerprinter.fingerprint(
-                img_path=preview_path, img_url=post.url
+            fingerprint = await self._fingerprinter.fingerprint(
+                img_path=result.preview_path, img_url=post.url
             )
 
             # sometimes images cannot be fingerprinted.
@@ -416,7 +417,7 @@ class TelegramBot:
                 continue
 
             # save the path of the file
-            post.setPath(post_path)
+            post.setPath(result.path)
             # update the database with post and fingerprint
             self._database.addData(fingerprint=fingerprint)
 
@@ -613,9 +614,9 @@ class TelegramBot:
             )
 
             # download the media
-            post_path, preview_path = self._downloader.downloadMedia(post.url)
+            result = await self._downloader.downloadMedia(post.url)
             # no path = the download failed, raise error
-            if not post_path:
+            if not result.is_successful or not result.path:
                 logging.error(f"Cannot download media: {post.url}")
                 await self._application.bot.send_message(
                     chat_id=chat_id,
@@ -623,8 +624,8 @@ class TelegramBot:
                 )
                 continue
 
-            fingerprint = self._fingerprinter.fingerprint(
-                img_path=preview_path, img_url=post.url
+            fingerprint = await self._fingerprinter.fingerprint(
+                img_path=result.preview_path, img_url=post.url
             )
 
             # sometimes images cannot be fingerprinted
@@ -638,7 +639,7 @@ class TelegramBot:
                 continue
 
             # save the path of the file
-            post.setPath(post_path)
+            post.setPath(result.path)
             # update database
             self._database.addData(post=post, fingerprint=fingerprint)
             # add it to queue

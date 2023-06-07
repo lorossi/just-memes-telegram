@@ -8,10 +8,12 @@ from subprocess import PIPE, run
 from time import time
 
 import ffmpeg
-import requests
 import ujson
 import xmltodict
 from PIL import Image
+
+from modules.common import asyncDownload, asyncRequest
+from modules.entities import DownloadResult
 
 
 class MediaDownloader:
@@ -102,45 +104,6 @@ class MediaDownloader:
 
         return (video_url, audio_url)
 
-    def _downloadImage(self, url: str, path: str = None) -> tuple[str, str]:
-        if not path:
-            path = self._generateFilename("png")
-
-        downloaded_path, preview_path = self._downloadContent(url, path)
-        if downloaded_path is None:
-            return None, None
-
-        self._convertImage(downloaded_path)
-        return downloaded_path, preview_path
-
-    def _downloadContent(self, url: str, path: str) -> tuple[str, str]:
-        """Download an image or a video by its url and return its path.
-
-        Args:
-            url (str): content url
-            path (str): path to save the content
-
-        Returns:
-            tuple[str, str]: path of the downloaded content and its preview.
-        """
-
-        r = requests.get(url)
-        if r.status_code != 200:
-            logging.error(f"Cannot download image. Status code: {r.status_code}")
-            return None, None
-        if r.url == self._imgur_removed_url:
-            logging.error("Image has been removed.")
-            return None, None
-
-        try:
-            with open(path, "wb") as f:
-                f.write(r.content)
-
-            return path, None
-        except Exception as e:
-            logging.error(f"Error while downloading media. Error: {e}.")
-            return None, None
-
     def _convertImage(self, path: str) -> None:
         """Convert an image to png.
 
@@ -176,23 +139,53 @@ class MediaDownloader:
             logging.error(f"Error while extracting first frame. Error: {e}.")
             return None
 
-    def _downloadVReddit(self, url: str) -> tuple[str, str]:
+    async def _downloadImage(self, url: str, path: str = None) -> DownloadResult:
+        """Download an image from the url.
+
+        Args:
+            url (str): url of the image
+            path (str, optional): path to save the image. Defaults to None.
+
+        Returns:
+            DownloadResult: download result
+        """
+        if not path:
+            path = self._generateFilename("png")
+
+        result = await asyncDownload(url, path)
+        if result.redirect_url == self._imgur_removed_url:
+            logging.error("Image was removed from Imgur.")
+            self.deleteFile(path)
+            return DownloadResult(
+                status=404, error="Image was removed from Imgur.", redirect_url=url
+            )
+
+        if not result.is_successful:
+            logging.error(f"Cannot download image. Status code: {result.status}")
+            self.deleteFile(path)
+            return DownloadResult(status=result.status, error="Cannot download image.")
+
+        self._convertImage(path)
+        return DownloadResult(status=200, path=path, preview_path=path)
+
+    async def _downloadVReddit(self, url: str) -> DownloadResult:
         """Download a video from v.redd.it by its url.
 
         Args:
             url (str): url of the post
 
         Returns:
-            tuple[str, str]: video and preview path
+            DownloadResult: download result
         """
         logging.info("Loading playlist.")
 
-        r = requests.get(url + "/DASHPlaylist.mpd")
+        request_url = url + "/DASHPlaylist.mpd"
+        r = await asyncRequest(request_url)
 
-        logging.info(f"Status code: {r.status_code}")
-        if r.status_code != 200:
-            logging.error(f"Cannot download video. Status code: {r.status_code}")
-            return
+        logging.info(f"Status code: {r.status}")
+        if r.status != 200:
+            logging.error(f"Cannot download video. Status code: {r.status}")
+            return DownloadResult(status=r.status, error="Cannot download video.")
 
         # load playlist
         playlist = xmltodict.parse(r.content)["MPD"]["Period"]["AdaptationSet"]
@@ -207,8 +200,16 @@ class MediaDownloader:
             audio_part_path = self._generateFilename("mp4")
             video_part_path = self._generateFilename("mp4")
 
-            self._downloadContent(audio_url, audio_part_path)
-            self._downloadContent(video_url, video_part_path)
+            audio_download = await asyncDownload(audio_url, audio_part_path)
+            video_download = await asyncDownload(video_url, video_part_path)
+
+            if not audio_download.is_successful or not video_download.is_successful:
+                self.deleteFile(audio_part_path)
+                self.deleteFile(video_part_path)
+                return DownloadResult(
+                    status=audio_download.status,
+                    error="Cannot download audio or video.",
+                )
 
             logging.info("Concatenating audio and video.")
 
@@ -229,37 +230,46 @@ class MediaDownloader:
                 )
                 self.deleteFile(audio_part_path)
                 self.deleteFile(video_part_path)
-                return None, None
+                return DownloadResult(error=e.stderr)
             except Exception as e:
                 logging.error(f"Error while concatenating video. Error: {e}")
                 self.deleteFile(audio_part_path)
                 self.deleteFile(video_part_path)
-                return None, None
+                return DownloadResult(error=str(e))
 
         else:
             logging.info("Downloading video.")
             # no audio
-            self._downloadContent(video_url, video_path)
+            download = await asyncDownload(video_url, video_path)
+            if not download.is_successful:
+                self.deleteFile(video_path)
+                return download
 
         # extract first frame
         preview_path = self._extractFirstFrame(video_path)
         if preview_path is not None:
-            return video_path, preview_path
+            return DownloadResult(
+                status=200, path=video_path, preview_path=preview_path
+            )
 
-        return None, None
+        return DownloadResult(error="Cannot extract first frame.")
 
-    def _downloadGif(self, gif_url: str) -> tuple[str, str]:
+    async def _downloadGif(self, gif_url: str) -> DownloadResult:
         """Download a gif from the url.
 
         Args:
             gif_url (str): url of the gif
 
         Returns:
-            tuple[str, str]: path of gif and preview path
+            DownloadResult: download result
         """
         logging.info(f"Downloading gif from {gif_url}")
         gif_path = self._generateFilename("gif")
-        self._downloadContent(gif_url, gif_path)
+        download = await asyncDownload(gif_url, gif_path)
+        if not download.is_successful:
+            logging.error(f"Cannot download gif. Status code: {download.status}")
+            self.deleteFile(gif_path)
+            return download
 
         # convert gif to mp4
         logging.info("Converting gif to mp4.")
@@ -278,11 +288,11 @@ class MediaDownloader:
                 f"Error in FFMPEG while converting video to GIF. Error: {e.stderr}"
             )
             self.deleteFile(gif_path)
-            return None, None
+            return DownloadResult(error=e.stderr)
         except Exception as e:
             logging.error(f"Error while converting video to GIF. Error: {e}")
             self.deleteFile(gif_path)
-            return None, None
+            return DownloadResult(error=str(e))
 
         # remove old file
         self.deleteFile(gif_path)
@@ -290,30 +300,44 @@ class MediaDownloader:
         # extract first frame
         preview_path = self._extractFirstFrame(video_path)
         if preview_path is not None:
-            return video_path, preview_path
+            return DownloadResult(
+                status=200, path=video_path, preview_path=preview_path
+            )
 
-        return None, None
+        return DownloadResult(error="Cannot extract first frame.")
 
-    def _downloadGifv(self, gifv_url: str) -> tuple[str, str]:
+    async def _downloadGifv(self, gifv_url: str) -> DownloadResult:
         """Download a gifv from the url.
 
         Args:
             gifv_url (str): url of the gifv
 
         Returns:
-            tuple[str, str]: path of gifv and preview path
+            DownloadResult: download result
         """
         logging.info(f"Downloading gifv from {gifv_url}")
         gifv_url = gifv_url.replace(".gifv", ".mp4")
         gifv_path = self._generateFilename("mp4")
-        self._downloadContent(gifv_url, gifv_path)
+
+        download = await asyncDownload(gifv_url, gifv_path)
+        if download.redirect_url == self._imgur_removed_url:
+            logging.error("Gifv was removed from Imgur.")
+            self.deleteFile(gifv_path)
+            return DownloadResult(
+                status=404, error="Gifv was removed from Imgur.", redirect_url=gifv_url
+            )
+
+        if not download.is_successful:
+            logging.error(f"Cannot download gifv. Status code: {download.status}")
+            self.deleteFile(gifv_path)
+            return DownloadResult(status=download.status, error=download.error)
 
         # extract first frame
         preview_path = self._extractFirstFrame(gifv_path)
         if preview_path is not None:
-            return gifv_path, preview_path
+            return DownloadResult(status=200, path=gifv_path, preview_path=preview_path)
 
-        return None, None
+        return DownloadResult(error="Cannot extract first frame.")
 
     def _matchExtension(self, regex: str, url: str) -> bool:
         """Check if the url matches the given regex.
@@ -328,16 +352,15 @@ class MediaDownloader:
         groups = re.search(regex, url)
         return groups is not None
 
-    def downloadMedia(self, url: str) -> tuple[str, str]:
-        """Download a media (either a video from v.redd.it, an image or a gif).
+    async def downloadMedia(self, url: str) -> DownloadResult:
+        """Asynchronously download a media
+        (either a video from v.redd.it, an image or a gif).
 
         Args:
             url (str): media URL
 
         Returns:
-            tuple[str, str]: path of the downloaded media and its preview.
-                If the media is a video, the preview is the first frame of the video.
-                If the media is an image, the preview is the image itself.
+            DownloadResult: download result
         """
         self._createTempFolder()
 
@@ -352,14 +375,19 @@ class MediaDownloader:
 
         for method, regex in methods_map.items():
             if self._matchExtension(regex, url):
-                path, preview_path = method(url)
-                if path is not None:
+                d = await method(url)
+                if d.is_successful:
                     logging.info(f"Downloading completed. Path: {path}")
-                    return path, preview_path
+                    return d
+                else:
+                    logging.error(f"Cannot download. Error: {d.error}")
+                    return d
                 break
 
-        logging.error("Cannot download. Aborting")
-        return None, None
+        logging.error("Cannot download. The url does not match any regex.")
+        return DownloadResult(
+            error="Cannot download. The url is not valid.", status=400
+        )
 
     def deleteFile(self, path: str) -> None:
         """Delete a file.

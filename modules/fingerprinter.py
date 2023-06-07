@@ -2,16 +2,17 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 from string import printable
 from time import time
 from typing import Any
 
 import imagehash
 import pytesseract
-import requests
 import ujson
 from PIL import Image
 
+from modules.common import asyncRequest
 from modules.data import Fingerprint
 
 
@@ -47,7 +48,9 @@ class Fingerprinter:
 
         return "".join([c if c in printable else "" for c in clean])
 
-    def fingerprint(self, img_url, img_path=None, hash=True, ocr=True) -> Fingerprint:
+    async def fingerprint(
+        self, img_url, img_path=None, hash=True, ocr=True
+    ) -> Fingerprint:
         """Fingerprint an image by providing its url.
 
         Args:
@@ -60,18 +63,24 @@ class Fingerprinter:
             Fingerprint
         """
         timestamp = time()
-        try:
-            if not img_path:
-                logging.info(f"Attempting to download image with url: {img_url}.")
-                r = requests.get(img_url, stream=True)
-                # handle spurious Content-Encoding
-                r.raw.decode_content = True
-                im = Image.open(r.raw)
-            else:
-                logging.info(f"Attempting to fingerprint image with path: {img_path}.")
-                # Open it in PIL
-                im = Image.open(img_path)
+        if not img_path:
+            logging.info(f"Attempting to download image with url: {img_url}.")
+            request = await asyncRequest(img_url)
+            if request.status != 200:
+                logging.error(
+                    f"Error while downloading image with url: {img_url}. "
+                    f"Status: {request.status}."
+                )
+                return None
 
+            content = BytesIO(request.content)
+            im = Image.open(content)
+        else:
+            logging.info(f"Attempting to fingerprint image with path: {img_path}.")
+            # Open it in PIL
+            im = Image.open(img_path)
+
+        try:
             # Hash it
             if hash:
                 img_hash = imagehash.dhash(im, hash_size=self.hash_size)
