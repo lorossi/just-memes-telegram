@@ -1,7 +1,7 @@
 import random
+import string
 import unittest
 from time import time
-import string
 
 from modules.data import Fingerprint, Post
 from modules.database import Database

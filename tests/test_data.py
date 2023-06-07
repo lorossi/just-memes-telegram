@@ -1,6 +1,6 @@
 import random
-import unittest
 import string
+import unittest
 
 from modules.data import Fingerprint, GenericData, Post
 
