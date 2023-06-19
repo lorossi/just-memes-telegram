@@ -1,6 +1,7 @@
 """Main bot script."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
@@ -10,6 +11,7 @@ from typing import Any
 import pytz
 import ujson
 from telegram import Update, constants
+from telegram.error import NetworkError
 from telegram.ext import (
     Application,
     CallbackContext,
@@ -40,7 +42,7 @@ class TelegramBot:
     cleanqueue - cleans queue
     """
 
-    _version: str = "2.2.1"
+    _version: str = "2.2.1.1"
     _settings_path: str = "settings/settings.json"
 
     _settings: dict[str, Any]
@@ -768,10 +770,30 @@ class TelegramBot:
         self._setupApplication()
         self._application.run_polling()
 
-    async def startAsync(self) -> None:
+    async def startAsync(self, wait_connection: bool = False) -> None:
+        """Start the bot in async mode.
+
+        Args:
+            wait_connection (bool, optional): If True, the bot will wait for
+                the connection to be established before starting. Defaults to False.
+
+        Raises:
+            NetworkError: If the connection cannot be established.
+        """
         logging.info("Starting bot in async mode...")
         self._setupApplication()
-        await self._application.initialize()
+
+        while True:
+            try:
+                await self._application.initialize()
+                break
+            except NetworkError as e:
+                if not wait_connection:
+                    raise e
+
+                logging.warning("Network error. Retrying in 5 seconds...")
+                await asyncio.sleep(5)
+
         await self._updater.start_polling()
         await self._application.start()
         self._application.post_stop = self._postStopRoutine

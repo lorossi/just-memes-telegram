@@ -29,7 +29,7 @@ async def main():
     t = TelegramBot()
 
     logging.info("Starting bot...")
-    await t.startAsync()
+    await t.startAsync(wait_connection=True)
     logging.info("Bot started.")
 
     try:
