@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import sys
+import traceback
 from datetime import datetime, time, timedelta
 from typing import Any
 
@@ -42,7 +43,7 @@ class TelegramBot:
     cleanqueue - cleans queue
     """
 
-    _version: str = "2.2.1.1"
+    _version: str = "2.2.3"
     _settings_path: str = "settings/settings.json"
 
     _settings: dict[str, Any]
@@ -491,25 +492,32 @@ class TelegramBot:
 
     async def _botError(self, update: Update, context: CallbackContext) -> None:
         """Send a message to admins whenever an error is raised."""
-        message = "*ERROR RAISED*"
-        # admin message
-        for chat_id in self._settings["admins"]:
-            await self._application.bot.send_message(chat_id=chat_id, text=message)
-
         error_string = str(context.error)
+        update_string = str(update)
         time_string = datetime.now().isoformat(sep=" ")
 
-        message = (
-            f"Error at time: {time_string}\n"
-            f"Error raised: {error_string}\n"
-            f"Update: {update}"
+        tb_list = traceback.format_exception(
+            None, context.error, context.error.__traceback__
         )
+        tb_string = " ".join(tb_list)
+
+        messages = [
+            f"Error at time: {time_string}\n",
+            f"Error raised: {error_string}\n",
+            f"Update: {update_string}",
+            f"Traceback:\n{tb_string}",
+        ]
 
         for chat_id in self._settings["admins"]:
-            await self._application.bot.send_message(chat_id=chat_id, text=message)
+            for message in messages:
+                await self._application.bot.send_message(
+                    chat_id=chat_id,
+                    text=self._escapeMarkdown(message),
+                )
 
-        # logs to file
+        # log to file
         logging.error(f"Update {update} caused error {context.error}.")
+        logging.error(f"Traceback:\n{tb_string}")
 
     # Bot commands
     async def _botStartCommand(self, update: Update, _: CallbackContext) -> None:
@@ -732,9 +740,6 @@ class TelegramBot:
                     parse_mode=constants.ParseMode.MARKDOWN,
                 )
             )
-            .pool_timeout(10)
-            .get_updates_http_version("1.1")
-            .http_version("1.1")
             .build()
         )
         self._jobqueue = self._application.job_queue

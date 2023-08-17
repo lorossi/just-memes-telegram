@@ -23,6 +23,7 @@ async def main():
         filemode="w",
         filename=__file__.replace(".py", ".log"),
     )
+
     tracemalloc.start()
 
     logging.info("Script started.c")
