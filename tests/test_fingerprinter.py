@@ -1,139 +1,120 @@
-import json
-import os
+"""Unit tests for the fingerprinter module."""
+
 import random
 import string
 import unittest
-from time import time
+from pathlib import Path
 
 import imagehash
-import aiohttp
-import aiofiles
+import pytest
+import ujson
 from PIL import Image
 
-from modules.data import Fingerprint
-from modules.fingerprinter import Fingerprinter
+from just_memes_telegram.modules.data import Fingerprint
+from just_memes_telegram.modules.fingerprinter import Fingerprinter
+from tests.utils import DATA_FOLDER, TempSettingsMixin, createTextImage, notNone
 
 
-class FingerprintBaseTest:
+class FingerprinterTest(TempSettingsMixin, unittest.IsolatedAsyncioTestCase):
+    """Unit tests for the Fingerprinter class."""
+
     _tests_num: int = 100
-    _img_folder: str = "tests/tmp"
-    _hashes_file: str = "tests/images.json"
 
     def setUp(self) -> None:
-        # create temp folder
-        os.makedirs(self._img_folder, exist_ok=True)
+        """Create the temporary settings and the fingerprinter."""
+        self.createTempSettings()
+        self.fingerprinter = Fingerprinter(settings_path=self.settings_path)
 
     def tearDown(self) -> None:
-        # delete temp folder and all its contents
-        for file in os.listdir(self._img_folder):
-            os.remove(os.path.join(self._img_folder, file))
-        os.rmdir(self._img_folder)
+        """Remove the temporary folder."""
+        self.removeTempSettings()
 
-    def _createRandomInvalidText(self):
-        invalid_characters = ["  ", "\n", "\t"]
-        valid_character = random.choice(list(string.ascii_lowercase))
-        invalid_list = [i * 100 for i in invalid_characters]
-        invalid_list += valid_character * 100
-        random.shuffle(invalid_list)
-        invalid_text = "".join(invalid_list)
-        return invalid_text, valid_character
-
-    def _createRandomValidText(self):
-        valid_characters = list(string.ascii_lowercase + string.digits)
-        valid_list = [i * 10 for i in valid_characters]
-        random.shuffle(valid_list)
-        valid_text = "".join(valid_list)
-        return valid_text
-
-    async def _request(self, url: str) -> tuple[str, int]:
-        async with aiohttp.ClientSession() as session:
-            s = await session.get(url)
-            if s.status != 200:
-                return "", s.status
-            return await s.read(), s.status
-
-    async def _writeFile(self, path: str, content: bytes) -> None:
-        async with aiofiles.open(path, "wb") as f:
-            await f.write(content)
-
-    def _hashImage(self, path: str) -> imagehash.ImageHash:
-        im = Image.open(path)
-        return imagehash.dhash(im, hash_size=32)
-
-    def _loadImageHashes(self):
-        with open(self._hashes_file) as json_file:
-            return json.load(json_file)["Hashes"]
-
-    def _createImageTestCases(self):
-        hash_data = self._loadImageHashes()
-        for item in hash_data:
-            url = item["url"]
-            # skip if hash has already been calculated
-            if item.get("hash") is not None:
-                continue
-
-            path = self._downloadImage(url)
-            hash = self._hashImage(path)
-            item["hash"] = str(hash)
-
-        with open(self._hashes_file, "w") as json_file:
-            json.dump({"Hashes": hash_data}, json_file, indent=4)
-
-
-class FingerprintTest(FingerprintBaseTest, unittest.TestCase):
-    def testCreation(self):
-        f = Fingerprinter()
-        self.assertIsInstance(f, Fingerprinter)
-
-    def testPrivateMethods(self):
-        f = Fingerprinter()
-
-        # test invalid text
+    def testCleanInvalidText(self) -> None:
+        """Test that whitespace is collapsed and text is lowercased."""
         for _ in range(self._tests_num):
-            invalid_text, valid_character = self._createRandomInvalidText()
-            clean_text = f._cleanText(invalid_text)
-            self.assertRegex(clean_text, r"^(" + valid_character + r"\s?)+$")
+            valid_character = random.choice(string.ascii_lowercase)
+            parts = [c * 100 for c in ("  ", "\n", "\t")] + [valid_character] * 100
+            random.shuffle(parts)
+            clean_text = Fingerprinter._cleanText("".join(parts))
+            self.assertRegex(clean_text, r"^(" + valid_character + r" ?)+$")
 
-        # test valid text
-        for _ in range(self._tests_num):
-            valid_text = self._createRandomValidText()
-            self.assertEqual(f._cleanText(valid_text), valid_text)
-
-    def testProperties(self):
-        f = Fingerprinter()
-        self.assertRegex(f.pytesseract_version, r"^\d+(\.\d+){2,}$")
-        self.assertEqual(f.hash_size, f._settings["hash_size"])
-
-        self.assertIsInstance(str(f), str)
-        self.assertEqual(f.__repr__(), str(f))
-        self.assertRegex(
-            str(f),
-            f.__class__.__name__ + ":" + r"\n\s*(·\s.*:\s.*\n\s*)+·\s.*:\s.*",
+        self.assertEqual(
+            Fingerprinter._cleanText("  Hello\n\tWORLD \x00 "), "hello world "
         )
 
+    def testCleanValidText(self) -> None:
+        """Test that clean text is not changed."""
+        for _ in range(self._tests_num):
+            parts = [c * 10 for c in string.ascii_lowercase + string.digits]
+            random.shuffle(parts)
+            valid_text = "".join(parts)
+            self.assertEqual(Fingerprinter._cleanText(valid_text), valid_text)
 
-class FingerprinterAsyncTest(FingerprintBaseTest, unittest.IsolatedAsyncioTestCase):
-    async def _downloadImage(self, url: str) -> str:
-        filename = int(time() * 10e6)
-        extension = url.split(".")[-1]
-        path = f"{self._img_folder}/{filename}.{extension}"
-        content, status = await self._request(url)
-        self.assertEqual(status, 200)
-        await self._writeFile(path, content)
-        return path
+    def testProperties(self) -> None:
+        """Test the properties and the string representation."""
+        self.assertRegex(self.fingerprinter.tesseract_version, r"^\d+(\.\d+)+")
+        self.assertEqual(self.fingerprinter.hash_size, 32)
+        self.assertEqual(repr(self.fingerprinter), str(self.fingerprinter))
+        self.assertRegex(
+            str(self.fingerprinter), r"^Fingerprinter:(\n\t· [\w ]+: .+)+$"
+        )
 
-    async def testFingerprint(self):
-        # necessary to test both url and path
-        f = Fingerprinter()
-        for hash_data in self._loadImageHashes():
-            hash = hash_data["hash"]
-            url = hash_data["url"]
-            path = await self._downloadImage(url)
-            # test download and hash
-            fp = await f.fingerprint(img_url=url)
-            self.assertIsInstance(fp, Fingerprint)
-            self.assertEqual(fp.hash_str, hash)
-            # test hash from file
-            fp = await f.fingerprint(img_url=url, img_path=path)
-            self.assertIsInstance(fp, Fingerprint)
-            self.assertEqual(fp.hash_str, hash)
+    async def testFingerprintPath(self) -> None:
+        """Test hashing and OCR of a local image."""
+        path = createTextImage(self.temp_dir / "image.png", "just memes")
+        with Image.open(path) as im:
+            expected_hash = imagehash.dhash(im, hash_size=32)
+
+        fp = await self.fingerprinter.fingerprint(img_url="local", img_path=str(path))
+        self.assertIsInstance(fp, Fingerprint)
+        fp = notNone(fp)
+        self.assertEqual(fp.hash, expected_hash)
+        self.assertEqual(fp.hash_str, str(expected_hash))
+        self.assertEqual(fp.url, "local")
+        self.assertIsNotNone(fp.caption)
+        self.assertIn("memes", fp.caption or "")
+
+    async def testFingerprintOptions(self) -> None:
+        """Test that hashing and OCR can be disabled."""
+        path = str(createTextImage(self.temp_dir / "image.png", "just memes"))
+
+        fp = await self.fingerprinter.fingerprint("local", path, ocr=False)
+        fp = notNone(fp)
+        self.assertIsNone(fp.caption)
+        self.assertIsNotNone(fp.hash)
+
+        fp = await self.fingerprinter.fingerprint("local", path, compute_hash=False)
+        fp = notNone(fp)
+        self.assertIsNone(fp.hash)
+        self.assertIsNone(fp.hash_str)
+
+    async def testFingerprintInvalid(self) -> None:
+        """Test that unreadable images return None."""
+        not_an_image = self.temp_dir / "image.png"
+        not_an_image.write_text("this is not an image", encoding="utf-8")
+        self.assertIsNone(
+            await self.fingerprinter.fingerprint("local", str(not_an_image))
+        )
+        self.assertIsNone(
+            await self.fingerprinter.fingerprint("local", str(self.temp_dir / "none"))
+        )
+
+    def testCompareHashes(self) -> None:
+        """Test the comparison of equal, different and incompatible hashes."""
+        h1 = imagehash.hex_to_hash("ffff0000ffff0000")
+        h2 = imagehash.hex_to_hash("ffff0000ffff0001")
+        h3 = imagehash.hex_to_hash("ff" * 32)
+        self.assertEqual(Fingerprinter.compareHashes(h1, h1), 0)
+        self.assertEqual(Fingerprinter.compareHashes(h1, h2), 1)
+        self.assertEqual(Fingerprinter.compareHashes(h1, h3), float("inf"))
+
+    @pytest.mark.network
+    async def testFingerprintUrl(self) -> None:
+        """Test that downloaded images match their stored hash."""
+        hashes = ujson.loads(
+            Path(DATA_FOLDER / "images.json").read_text(encoding="utf-8")
+        )["Hashes"]
+        for item in hashes:
+            fp = await self.fingerprinter.fingerprint(img_url=item["url"], ocr=False)
+            fp = notNone(fp)
+            self.assertEqual(fp.hash_str, item["hash"])

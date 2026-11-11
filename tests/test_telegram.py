@@ -1,304 +1,333 @@
-from __future__ import annotations
+"""Unit tests for the telegram bot module."""
 
 import asyncio
 import unittest
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from http import HTTPStatus
+from pathlib import Path
+from typing import ClassVar
+from unittest.mock import AsyncMock, MagicMock
+from zoneinfo import ZoneInfo
 
-import pytz
-import ujson
+import pytest
+from imagehash import hex_to_hash
 
-from modules.database import Database
-from modules.telegrambot import TelegramBot
+from just_memes_telegram.modules.data import Fingerprint, Post
+from just_memes_telegram.modules.entities import DownloadResult
+from just_memes_telegram.modules.telegrambot import ADMIN_ONLY_MESSAGE, TelegramBot
+from tests.utils import REAL_SETTINGS_PATH, TempSettingsMixin, createTextImage
 
-
-class TelegramBotTest(unittest.TestCase):
-    def testCreation(self):
-        bot = TelegramBot()
-        self.assertIsInstance(bot, TelegramBot)
-
-    def testProperties(self):
-        bot = TelegramBot()
-        words_to_skip = sorted(s.lower() for s in bot._settings["words_to_skip"])
-        words_to_skip_str = ", ".join(words_to_skip)
-
-        self.assertEqual(bot.words_to_skip, words_to_skip)
-        self.assertEqual(bot.words_to_skip_str, words_to_skip_str)
+ADMIN_ID = 123456789
+USER_ID = 987654321
 
 
-class TelegramAsyncBotTest(unittest.IsolatedAsyncioTestCase):
-    _commandRegexes = {
+class TelegramBotTest(TempSettingsMixin, unittest.IsolatedAsyncioTestCase):
+    """Unit tests for the TelegramBot class, with a mocked Telegram bot."""
+
+    COMMAND_REGEXES: ClassVar[dict[str, str]] = {
         "_botStartCommand": r"\*Welcome in the Just Memes backend bot\*\n"
         r"\*This bot is used to manage the Just Memes meme channel\*\n"
-        r"_Join us at_ \@justmemes69lmao\w*",
+        r"_Join us at_ @justmemes69lmao",
         "_botPingCommand": r"🏓 \*PONG\* 🏓",
-        "_botStatusCommand": r"([a-zA-Z]+:(\n\t·\s[a-zA-Z]+: \w+)+\n)+",
-        "_botNextpostCommand": r"_The next meme is scheduled for:_ \d{4}-\d{2}-\d{2} "
-        r"\d{2}:\d{2}:\d{2}\n"
-        r"_The next preload is scheduled for:_ \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}",
+        "_botStatusCommand": r"^TelegramBot:(\n\t· .+)+\n\nReddit:",
+        "_botNextpostCommand": r"_The next meme is scheduled for:_ not scheduled\n"
+        r"_The next preload is scheduled for:_ not scheduled",
         "_botQueueCommand": r"\*The queue is empty\*"
         r"\n_Pass the links as argument to set them_",
+        "_botCleanqueueCommand": r"Queue cleaned",
         "_botResetCommand": r"_Resetting\.\.\._",
         "_botStopCommand": r"_Bot stopped_",
-        "error": r"\*This command is for admins only\*",
     }
 
-    def setUp(self) -> None:
-        d = Database()
-        d.deleteAll()
+    async def asyncSetUp(self) -> None:
+        """Create the bot and connect its database."""
+        self.createTempSettings()
+        self.bot = TelegramBot(settings_path=self.settings_path)
+        await self.bot._database.connect()
 
-    def tearDown(self) -> None:
-        d = Database()
-        d.deleteAll()
+    async def asyncTearDown(self) -> None:
+        """Release the resources and remove the temporary folder."""
+        await self.bot.stop()
+        self.removeTempSettings()
 
-    def _createMockBot(self):
-        bot = AsyncMock()
-        return bot
+    @staticmethod
+    def _createMockUpdate(chat_id: int) -> MagicMock:
+        """Create an update coming from a chat.
 
-    def _createMockContext(self):
-        context = AsyncMock()
-        return context
+        Args:
+            chat_id (int): id of the chat
 
-    def _createMockUpdate(self, chat_id: int = 123456789):
-        update = AsyncMock()
+        Returns:
+            MagicMock: the update
+        """
+        update = MagicMock()
         update.effective_chat.id = chat_id
-
         return update
 
-    async def _createPatchedBot(self):
-        bot = TelegramBot()
+    @staticmethod
+    def _createMockContext(args: list[str] | None = None) -> MagicMock:
+        """Create a context with a mocked bot.
 
-        bot_mock = self._createMockBot()
+        Args:
+            args (list[str], optional): arguments of the command
 
-        # manually start the bot
-        bot._setupApplication()
-        await bot._application.initialize()
-        await bot._updater.start_polling()
-        await bot._application.start()
-        # inject the mock bot
-        bot._application.bot = bot_mock
-        # stop the routines
-        bot._preload_memes_job.schedule_removal()
-        bot._send_memes_job.schedule_removal()
-        bot._clean_database_job.schedule_removal()
+        Returns:
+            MagicMock: the context
+        """
+        context = MagicMock()
+        context.bot = AsyncMock()
+        context.args = args or []
+        return context
 
-        return bot, bot_mock
+    def _createPost(self, name: str, title: str = "a meme") -> Post:
+        """Create a post whose media is a local image.
 
-    def _createSilentTelegramBot(self):
-        bot = TelegramBot()
-        bot._settings["admins"] = []
-        return bot
+        Args:
+            name (str): name of the post (used as id and file name)
+            title (str, optional): title of the post
 
-    def _loadFileSizes(self):
-        with open("tests/files.json") as json_file:
-            return ujson.load(json_file)["Files"]
-
-    async def testCreation(self):
-        bot = TelegramBot()
-        self.assertIsInstance(bot, TelegramBot)
-
-        await bot.startAsync()
-
-        bot_mock = AsyncMock()
-        bot_mock.send_message = AsyncMock()
-        bot._application.bot = bot_mock
-
-        # await a few seconds to make sure the bot is ready
-        await asyncio.sleep(3)
-
-        self.assertIsNotNone(bot._preload_memes_job)
-        self.assertIsNotNone(bot._send_memes_job)
-        self.assertIsNotNone(bot._clean_database_job)
-
-        await bot.stopAsync()
-
-    async def testInitMethods(self):
-        bot = self._createSilentTelegramBot()
-        self.assertIsInstance(bot, TelegramBot)
-
-        set_memes_mock = MagicMock()
-        startup_mock = MagicMock()
-        bot._setMemesRoutineInterval = set_memes_mock
-        bot._botStartupRoutine = startup_mock
-
-        await bot.startAsync()
-        await asyncio.sleep(3)
-        await bot.stopAsync()
-
-        set_memes_mock.assert_called_once()
-        startup_mock.assert_called_once()
-
-    async def testSendMemesRoutine(self):
-        bot = self._createSilentTelegramBot()
-        # get the seconds since midnight
-        seconds_since_midnight = (
-            datetime.now() - datetime.now().replace(hour=0, minute=0, second=0)
-        ).total_seconds()
-        # set the bot to send a meme an hour
-        bot._settings["memes_per_day"] = 24
-        # set the bot to send a meme in 10 seconds
-        bot._settings["preload_time"] = 5
-        bot._settings["start_delay"] = int(seconds_since_midnight + 10)
-
-        # create a mock bot
-        # start the bot
-        await bot.startAsync()
-        bot_mock = self._createMockBot()
-        bot._application.bot = bot_mock
-
-        # wait for the bot to send the memes
-        await asyncio.sleep(20)
-
-        # stop the bot
-        await bot.stopAsync()
-
-        # check if the bot sent the memes
-        call_count = bot_mock.send_video.call_count + bot_mock.send_photo.call_count
-        self.assertEqual(call_count, 1)
-
-    async def testCleanRoutine(self):
-        bot = TelegramBot()
-        # get the seconds since midnight
-        seconds_since_midnight = (
-            datetime.now() - datetime.now().replace(hour=0, minute=0, second=0)
-        ).total_seconds()
-        # set the bot to clean the database 5 seconds from now
-        bot._settings["clean_database_time"] = int(seconds_since_midnight + 5)
-
-    async def testCommandsAdmin(self):
-        chat_id = 123456789
-
-        update_mock = self._createMockUpdate(chat_id=chat_id)
-        context_mock = self._createMockContext()
-
-        # manually start the bot
-        bot, bot_mock = await self._createPatchedBot()
-        # set the admins
-        bot._settings["admins"] = [chat_id]
-
-        for command in [
-            bot._botStartCommand,
-            bot._botPingCommand,
-            bot._botStatusCommand,
-            bot._botQueueCommand,
-        ]:
-            regex = self._commandRegexes[command.__name__]
-            await command(update_mock, context_mock)
-            args = bot_mock.send_message.call_args[1]
-            self.assertRegex(args["text"], regex)
-            self.assertEqual(args["chat_id"], chat_id)
-            bot_mock.reset_mock()
-
-        await bot.stopAsync()
-
-    async def testCommandsAdminResetStop(self):
-        # patch os to avoid stopping the bot
-        chat_id = 123456789
-        update_mock = self._createMockUpdate(chat_id=chat_id)
-        context_mock = self._createMockContext()
-
-        bot, bot_mock = await self._createPatchedBot()
-        # set the admins
-        bot._settings["admins"] = [chat_id]
-
-        with patch("modules.telegrambot.os") as os_mock:
-            await bot._botResetCommand(update_mock, context_mock)
-            args = bot_mock.send_message.call_args[1]
-            self.assertRegex(args["text"], self._commandRegexes["_botResetCommand"])
-            args = os_mock.execl.call_args[0]
-
-            self.assertRegex(
-                args[0],
-                r"(/.*)+python",
-            )
-            os_mock.execl.assert_called_once()
-            os_mock.reset_mock()
-
-            await bot._botStopCommand(update_mock, context_mock)
-            args = bot_mock.send_message.call_args[1]
-            self.assertRegex(args["text"], self._commandRegexes["_botStopCommand"])
-            os_mock._exit.assert_called_once()
-
-        await bot.stopAsync()
-
-    async def testCommandsNotAdmin(self):
-        chat_id = 123456789
-        admin_id = 987654321
-
-        update_mock = self._createMockUpdate(chat_id=chat_id)
-        context_mock = self._createMockContext()
-
-        # manually start the bot
-        bot, bot_mock = await self._createPatchedBot()
-        # set the admins
-        bot._settings["admins"] = [admin_id]
-
-        for command in [
-            bot._botResetCommand,
-            bot._botStopCommand,
-            bot._botStatusCommand,
-            bot._botQueueCommand,
-            bot._botCleanqueueCommand,
-            bot._botNextpostCommand,
-        ]:
-            regex = self._commandRegexes["error"]
-            await command(update_mock, context_mock)
-            args = bot_mock.send_message.call_args[1]
-            self.assertRegex(args["text"], regex)
-            self.assertEqual(args["chat_id"], chat_id)
-            bot_mock.reset_mock()
-
-        await bot.stopAsync()
-
-    async def testPrivateMethods(self):
-        bot, _ = await self._createPatchedBot()
-
-        posts_per_day = 24
-        preload_time = 30
-        start_delay = 0
-        seconds_between_posts = int(24 * 60 * 60 / posts_per_day)
-        admin_id = 123456789
-
-        bot._settings["posts_per_day"] = posts_per_day
-        bot._settings["preload_time"] = preload_time
-        bot._settings["start_delay"] = start_delay
-        bot._settings["admins"] = [admin_id]
-
-        # test seconds between posts
-        seconds = bot._getSecondsBetweenPosts()
-        self.assertEqual(seconds, seconds_between_posts)
-
-        # freeze time
-        now = datetime.now(tz=pytz.timezone("Europe/Rome")).replace(microsecond=0)
-
-        # test calculate preload
-        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        next_preload = (
-            midnight - timedelta(seconds=preload_time) + timedelta(seconds=start_delay)
+        Returns:
+            Post: the post
+        """
+        path = createTextImage(self.bot._downloader.temp_folder / f"{name}.png", name)
+        return Post(
+            url=f"https://i.redd.it/{name}.png", id=name, title=title, path=str(path)
         )
-        while next_preload <= now:
-            next_preload += timedelta(seconds=seconds_between_posts)
 
-        next_post = next_preload + timedelta(seconds=preload_time)
+    def _mockDownloads(self, hash_str: str = "ffff0000ffff0000") -> None:
+        """Mock the download and the fingerprint of the media.
 
-        with patch("modules.telegrambot.datetime") as datetime_mock:
-            datetime_mock.now.return_value = now
-            seconds_remaining, timestamp = bot._calculatePreload()
-            self.assertEqual(seconds_remaining, (next_preload - now).total_seconds())
-            self.assertEqual(timestamp, next_preload.isoformat(sep=" "))
+        Args:
+            hash_str (str, optional): hash returned by the fingerprinter
+        """
 
-            seconds_remaining, timestamp = bot._calculateNextPost()
-            self.assertEqual(seconds_remaining, (next_post - now).total_seconds())
-            self.assertEqual(timestamp, next_post.isoformat(sep=" "))
+        def download(url: str) -> DownloadResult:
+            name = url.rsplit("/", 1)[-1].removesuffix(".png")
+            path = createTextImage(
+                self.bot._downloader.temp_folder / f"{name}.png", name
+            )
+            return DownloadResult(
+                status=HTTPStatus.OK, path=str(path), preview_path=str(path)
+            )
 
-        # test is admin
-        self.assertTrue(bot._isAdmin(admin_id))
-        # test file size
-        for file in self._loadFileSizes():
-            url = file["url"]
-            size = file["size"]
-            calculated_size = await bot._getFileSize(url)
-            size_mb = size / 1024 / 1024
-            self.assertAlmostEqual(calculated_size, size_mb, delta=0.1)
+        def fingerprint(img_url: str, **_: object) -> Fingerprint:
+            return Fingerprint(
+                caption="a meme",
+                hash=hex_to_hash(hash_str),
+                hash_str=hash_str,
+                url=img_url,
+            )
 
-        await bot.stopAsync()
+        self.bot._downloader.downloadMedia = AsyncMock(side_effect=download)
+        self.bot._fingerprinter.fingerprint = AsyncMock(side_effect=fingerprint)
+
+    async def testProperties(self) -> None:
+        """Test the properties and the string representation."""
+        self.assertListEqual(self.bot.words_to_skip, ["reddit", "upvote"])
+        self.assertEqual(self.bot.words_to_skip_str, "reddit, upvote")
+        self.assertFalse(self.bot.restart_requested)
+        self.assertEqual(repr(self.bot), str(self.bot))
+        self.assertIn("start delay: 0 seconds", str(self.bot))
+
+    async def testTextValid(self) -> None:
+        """Test that the blocked words are matched case insensitively."""
+        self.assertTrue(self.bot._textValid(None))
+        self.assertTrue(self.bot._textValid(""))
+        self.assertTrue(self.bot._textValid("a normal meme"))
+        self.assertFalse(self.bot._textValid("please UPVOTE this"))
+        self.assertFalse(self.bot._textValid("reddit moment"))
+
+        # empty words would match every text
+        self.bot._settings["words_to_skip"] = [""]
+        self.assertTrue(self.bot._textValid("a normal meme"))
+
+    async def testScheduling(self) -> None:
+        """Test the calculation of the next preload and post."""
+        tz = ZoneInfo("Europe/Rome")
+        seconds_between = 3600
+        preload_time = 30
+        self.bot._settings.update(
+            posts_per_day=24, preload_time=preload_time, start_delay=600
+        )
+        self.assertEqual(self.bot._getSecondsBetweenPosts(), seconds_between)
+
+        for now in [
+            datetime(2026, 11, 11, 0, 0, 0, tzinfo=tz),
+            datetime(2026, 11, 11, 0, 9, 30, tzinfo=tz),
+            datetime(2026, 11, 11, 13, 45, 12, tzinfo=tz),
+            datetime(2026, 11, 11, 23, 59, 59, tzinfo=tz),
+        ]:
+            # brute force the expected value
+            expected = now.replace(hour=0, minute=10, second=0) - timedelta(
+                seconds=preload_time
+            )
+            while expected <= now:
+                expected += timedelta(seconds=seconds_between)
+
+            seconds, timestamp = self.bot._calculatePreload(now)
+            self.assertEqual(seconds, (expected - now).total_seconds())
+            self.assertEqual(timestamp, expected.isoformat(sep=" "))
+
+            seconds, timestamp = self.bot._calculateNextPost(now)
+            expected_post = expected + timedelta(seconds=preload_time)
+            self.assertEqual(seconds, (expected_post - now).total_seconds())
+            self.assertEqual(timestamp, expected_post.isoformat(sep=" "))
+
+    async def testCommandsAdmin(self) -> None:
+        """Test the replies of the commands to an admin."""
+        update = self._createMockUpdate(ADMIN_ID)
+        for name, regex in self.COMMAND_REGEXES.items():
+            context = self._createMockContext()
+            await getattr(self.bot, name)(update, context)
+            kwargs = context.bot.send_message.call_args.kwargs
+            self.assertRegex(kwargs["text"], regex, name)
+            self.assertEqual(kwargs["chat_id"], ADMIN_ID)
+
+    async def testCommandsNotAdmin(self) -> None:
+        """Test that admin commands are refused to other users."""
+        update = self._createMockUpdate(USER_ID)
+        for name in [
+            "_botResetCommand",
+            "_botStopCommand",
+            "_botStatusCommand",
+            "_botQueueCommand",
+            "_botCleanqueueCommand",
+            "_botNextpostCommand",
+        ]:
+            context = self._createMockContext()
+            await getattr(self.bot, name)(update, context)
+            context.bot.send_message.assert_called_once_with(
+                chat_id=USER_ID, text=ADMIN_ONLY_MESSAGE
+            )
+
+        self.assertFalse(self.bot._stop_event.is_set())
+
+    async def testStopRequests(self) -> None:
+        """Test that the stop and reset commands request a stop."""
+        update = self._createMockUpdate(ADMIN_ID)
+        await self.bot._botStopCommand(update, self._createMockContext())
+        await asyncio.wait_for(self.bot.waitForStopRequest(), timeout=1)
+        self.assertFalse(self.bot.restart_requested)
+
+        await self.bot._botResetCommand(update, self._createMockContext())
+        self.assertTrue(self.bot.restart_requested)
+
+    async def testQueueCommand(self) -> None:
+        """Test adding urls to the queue and cleaning it."""
+        self._mockDownloads()
+        update = self._createMockUpdate(ADMIN_ID)
+        urls = ["https://i.redd.it/first.png", "https://i.redd.it/second.png"]
+
+        context = self._createMockContext(urls)
+        await self.bot._botQueueCommand(update, context)
+        self.assertRegex(
+            context.bot.send_message.call_args.kwargs["text"], r"^2 _Images added"
+        )
+        self.assertListEqual([p.url for p in self.bot._queue], urls)
+        self.assertTupleEqual(await self.bot._database.getStoredData(), (2, 2))
+
+        context = self._createMockContext()
+        await self.bot._botQueueCommand(update, context)
+        self.assertIn("first", context.bot.send_message.call_args.kwargs["text"])
+
+        paths = [Path(p.path or "") for p in self.bot._queue]
+        await self.bot._botCleanqueueCommand(update, self._createMockContext())
+        self.assertListEqual(self.bot._queue, [])
+        self.assertFalse(any(p.exists() for p in paths))
+
+    async def testSendRoutine(self) -> None:
+        """Test that the first post of the queue is sent and its file deleted."""
+        context = self._createMockContext()
+        await self.bot._botSendmemeRoutine(context)
+        context.bot.send_photo.assert_not_called()
+
+        post = self._createPost("first")
+        self.bot._queue.append(post)
+        await self.bot._botSendmemeRoutine(context)
+
+        context.bot.send_photo.assert_called_once_with(
+            chat_id="@justmemes69lmao",
+            photo=Path(post.path or ""),
+            caption="test caption",
+        )
+        self.assertListEqual(self.bot._queue, [])
+        self.assertFalse(Path(post.path or "").exists())
+
+        video = self._createPost("video")
+        video.video = True
+        self.bot._queue.append(video)
+        await self.bot._botSendmemeRoutine(context)
+        context.bot.send_video.assert_called_once()
+
+    async def testPreloadRoutine(self) -> None:
+        """Test that old, reposted and blocked posts are skipped."""
+        repost_hash = "ffff0000ffff0000"
+        self._mockDownloads(hash_str=repost_hash)
+        await self.bot._database.addData(
+            post=Post(url="https://i.redd.it/old.png", id="old"),
+            fingerprint=Fingerprint(
+                caption=None,
+                hash=hex_to_hash(repost_hash),
+                hash_str=repost_hash,
+                url="https://i.redd.it/old.png",
+            ),
+        )
+
+        posts = [
+            Post(url="https://i.redd.it/old.png", id="old", title="old"),
+            Post(url="https://i.redd.it/blocked.png", id="blocked", title="Upvote!"),
+            Post(url="https://i.redd.it/repost.png", id="repost", title="repost"),
+        ]
+        self.bot._reddit.fetch = AsyncMock(return_value=posts)
+        await self.bot._botPreloadmemeRoutine(self._createMockContext())
+        self.assertListEqual(self.bot._queue, [])
+        # the repost file is deleted
+        self.assertListEqual(list(self.bot._downloader.temp_folder.iterdir()), [])
+        self.assertSetEqual(
+            await self.bot._database.getOldIds(), {"old", "blocked", "repost"}
+        )
+
+        self._mockDownloads(hash_str="0123456789abcdef")
+        valid = Post(url="https://i.redd.it/valid.png", id="valid", title="valid")
+        self.bot._reddit.fetch = AsyncMock(return_value=[*posts, valid])
+        await self.bot._botPreloadmemeRoutine(self._createMockContext())
+        self.assertListEqual(self.bot._queue, [valid])
+        self.assertTrue(Path(valid.path or "").exists())
+
+        # the queue is full, nothing is fetched
+        self.bot._reddit.fetch.reset_mock()
+        await self.bot._botPreloadmemeRoutine(self._createMockContext())
+        self.bot._reddit.fetch.assert_not_called()
+
+    async def testCleanRoutineKeepsQueue(self) -> None:
+        """Test that the clean routine does not delete the queued files."""
+        queued = self._createPost("queued")
+        self.bot._queue.append(queued)
+        createTextImage(self.bot._downloader.temp_folder / "stale.png", "stale")
+
+        await self.bot._botCleanRoutine(self._createMockContext())
+        self.assertListEqual(
+            list(self.bot._downloader.temp_folder.iterdir()), [Path(queued.path or "")]
+        )
+
+    async def testErrorHandler(self) -> None:
+        """Test that errors are sent, escaped and truncated, to the admins."""
+        context = self._createMockContext()
+        context.error = ValueError("_bad_ " * 2000)
+
+        await self.bot._botError(None, context)
+        self.assertEqual(context.bot.send_message.call_count, 4)
+        for call in context.bot.send_message.call_args_list:
+            self.assertEqual(call.kwargs["chat_id"], ADMIN_ID)
+            self.assertLessEqual(len(call.kwargs["text"]), 4096)
+            self.assertNotRegex(call.kwargs["text"], r"(?<!\\)_")
+
+    @pytest.mark.credentials
+    async def testStartStop(self) -> None:
+        """Test starting and stopping the bot with real credentials."""
+        await self.bot.stop()
+        bot = TelegramBot(settings_path=REAL_SETTINGS_PATH)
+        bot._settings["admins"] = []
+        await bot.start()
+        self.assertNotEqual(bot._getNextTimestamps()[0], "not scheduled")
+        await bot.stop()

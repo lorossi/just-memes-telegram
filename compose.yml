@@ -1,0 +1,11 @@
+services:
+  just-memes-telegram:
+    build:
+      context: .
+    image: just-memes-telegram
+    container_name: just-memes-telegram
+    restart: unless-stopped
+    volumes:
+      # settings.json is read only, the SQLite database is stored in data/
+      - ./settings:/app/settings:ro
+      - ./data:/app/data
