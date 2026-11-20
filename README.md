@@ -102,6 +102,9 @@ I should have read the wiki more carefully.
 
 I use arch, by the way.
 
+*Update:* MongoDB has since been replaced by a single SQLite file.
+A whole database server for a couple of tables was, once again, over-engineering.
+
 ### Video Memes
 
 In the past few years, thanks to the rise of TikTok and the new, horrible, Reddit video player that no longer relies on Gfycat or Imgur, video memes have become more and more popular.
@@ -133,4 +136,35 @@ A new meme every 30 minutes!
 
 This repo is distributed under GNU GPG 3 license.
 
-Requirements are created using [pipreqs](https://github.com/bndr/pipreqs).
+## Running the bot
+
+Copy `settings/settings.example.json` to `settings/settings.json` and fill in the Reddit and Telegram credentials.
+
+### Docker
+
+```bash
+docker compose up -d --build
+```
+
+The settings folder is mounted read-only, the SQLite database is stored in `data/`.
+
+### Locally
+
+The bot needs `ffmpeg` and `tesseract` installed on the system, and [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv sync
+uv run just-memes-telegram
+```
+
+## Development
+
+```bash
+uv run ruff check        # lint
+uv run ruff format       # format
+uv run ty check          # type check
+uv run pytest --cov      # offline tests
+uv run pytest --network  # also run the tests that need internet access
+```
+
+Tests marked as `credentials` also need a real `settings/settings.json`.

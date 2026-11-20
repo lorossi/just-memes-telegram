@@ -1,8 +1,21 @@
+# Ignore settings, data and logs
+settings/settings*.json
+!settings/settings.example.json
+data/
+tmp/
 *.log
-coverage
-.coverage
+
+# VSCode settings
 .vscode
+
+# Python
 .venv
 __pycache__
-settings*.json
-tmp
+.ruff_cache
+.pytest_cache
+*.egg-info
+
+# Python test files
+.coverage
+coverage/
+htmlcov/

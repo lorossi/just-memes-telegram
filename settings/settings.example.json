@@ -6,17 +6,14 @@
     "id": "",
     "token": "",
     "request_limit": 100,
-    "subreddits": [
-      ""
-    ]
+    "subreddits": []
   },
   "Fingerprinter": {
     "tesseract_path": "",
     "hash_size": 32
   },
   "Database": {
-    "mongodb_url": "",
-    "database_name": "",
+    "database_path": "data/just-memes.db",
     "max_days": 28
   },
   "Telegram": {
@@ -24,14 +21,13 @@
     "token": "",
     "channel_name": "",
     "caption": "",
-    "words_to_skip": [
-      ""
-    ],
+    "words_to_skip": [],
     "ocr": true,
     "posts_per_day": 1440,
     "hash_threshold": 10,
     "start_delay": 0,
     "preload_time": 30,
+    "clean_time": 0,
     "max_gif_size": 25,
     "admins": []
   }
