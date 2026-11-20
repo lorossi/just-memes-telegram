@@ -1,0 +1,75 @@
+name: Test and Lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run ruff linter
+        run: uv run ruff check --output-format github
+
+      - name: Check formatting
+        run: uv run ruff format --check
+
+      - name: Run ty type checks
+        run: uv run ty check
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # network and credentials tests are skipped: they depend on external services
+      - name: Run pytest
+        run: uv run pytest --cov --cov-report=term-missing
+
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker compose build
+
+      - name: Smoke test Docker image
+        run: >-
+          docker compose run --rm --no-deps just-memes-telegram
+          sh -c "python -c 'import just_memes_telegram.main' && ffmpeg -version && tesseract --version"
