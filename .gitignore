@@ -1,7 +1,7 @@
 # Ignore settings, data and logs
 settings/settings*.json
 !settings/settings.example.json
-data/
+/data/
 tmp/
 *.log
 

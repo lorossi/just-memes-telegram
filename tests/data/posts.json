@@ -1,0 +1,16 @@
+{
+  "Posts": [
+    "https://v.redd.it/k7tgylvcknta1",
+    "https://i.redd.it/gqsb2cwtwnn41.gif",
+    "https://i.imgur.com/0423tYn.gifv",
+    "https://i.redd.it/0gsv9rijxpn51.jpg"
+  ],
+  "Invalid": [
+    "https://google.com",
+    "https://invalidwebsite123.com",
+    "https://i.redd.it/INVALID.jpg",
+    "https://v.reddit.it/INVALID",
+    "https://i.imgur.com/INVALID.gifv",
+    "https://i.imgur.com/INVALID.jpg"
+  ]
+}

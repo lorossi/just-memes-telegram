@@ -1,0 +1,42 @@
+{
+  "VideoDownloader": {
+    "temp_folder": "TEMP_FOLDER"
+  },
+  "Reddit": {
+    "id": "test-id",
+    "token": "test-token",
+    "request_limit": 100,
+    "subreddits": [
+      "memes",
+      "dankmemes"
+    ]
+  },
+  "Fingerprinter": {
+    "tesseract_path": "",
+    "hash_size": 32
+  },
+  "Database": {
+    "database_path": "DATABASE_PATH",
+    "max_days": 28
+  },
+  "Telegram": {
+    "timezone": "Europe/Rome",
+    "token": "123456:TEST-TOKEN",
+    "channel_name": "@justmemes69lmao",
+    "caption": "test caption",
+    "words_to_skip": [
+      "Reddit",
+      "Upvote"
+    ],
+    "ocr": true,
+    "posts_per_day": 24,
+    "hash_threshold": 10,
+    "start_delay": 0,
+    "preload_time": 30,
+    "clean_time": 0,
+    "max_gif_size": 25,
+    "admins": [
+      123456789
+    ]
+  }
+}
