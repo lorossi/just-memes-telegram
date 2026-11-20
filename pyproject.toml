@@ -1,0 +1,110 @@
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"
+
+
+[project]
+name = "just-memes-telegram"
+version = "3.0.0"
+description = "A Telegram bot that posts memes from Reddit, filtering reposts and unwanted content."
+requires-python = ">=3.13"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE.md"]
+dependencies = [
+  "aiofiles==25.1.0",
+  "aiohttp==3.14.5",
+  "aiosqlite==0.22.1",
+  "asyncpraw==8.0.3",
+  "ffmpeg-python==0.2.0",
+  "imagehash==4.3.2",
+  "loguru==0.8.0",
+  "pillow==13.0.0",
+  "pytesseract==0.3.13",
+  "python-telegram-bot[job-queue]==22.8",
+  "tzdata==2026.6",
+  "ujson==6.1.0",
+  "xmltodict==1.0.4",
+]
+
+[project.scripts]
+just-memes-telegram = "just_memes_telegram.main:run"
+
+[project.urls]
+"Homepage" = "https://github.com/lorossi/just-memes-telegram"
+"Repository" = "https://github.com/lorossi/just-memes-telegram"
+
+[dependency-groups]
+dev = [
+  "ruff==0.17.2",
+  "ty==0.0.92",
+  "types-aiofiles==25.1.0.20261107",
+  { include-group = "test" },
+]
+test = ["pytest==9.2.0", "pytest-asyncio==1.4.1.post1", "pytest-cov==7.1.0"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.build-backend]
+module-root = ""
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+preview = true # needed for "DOC" rules
+select = ["ALL"]
+ignore = [
+  "ANN401",  # allow "Any" type
+  "COM812",  # conflicts with the formatter
+  "CPY001",  # no copyright header in every file
+  "N802",    # the project uses camelCase method names
+  "S311",    # random is not used for cryptography
+  "PLR0913", # PTB callbacks and helpers need several arguments
+  "PLR0917",
+  "RUF201",  # rule codes are kept in the selectors
+]
+unfixable = ["F401"] # do not fix unused imports
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "PT009",   # tests are written with unittest
+  "PT027",
+  "PLR2004", # magic values are fine in tests
+  "PLC2701", # tests access private members
+  "SLF001",
+  "PLR0904", # test cases have many test methods
+  "ASYNC240", # blocking file checks are fine in tests
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.terminal]
+error-on-warning = true
+
+[tool.ty.rules]
+possibly-missing-attribute = "error"
+possibly-missing-import = "error"
+possibly-unresolved-reference = "error"
+redundant-cast = "error"
+unused-ignore-comment = "error"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = [
+  "network: needs internet access",
+  "credentials: needs a real settings/settings.json with Reddit and Telegram credentials",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["just_memes_telegram"]
+omit = ["tests/**", "**/__init__.py", "**/main.py"]
