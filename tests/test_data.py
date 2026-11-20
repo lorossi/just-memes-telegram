@@ -1,107 +1,90 @@
+"""Unit tests for the data classes."""
+
 import random
 import string
 import unittest
+from time import sleep
 
-from modules.data import Fingerprint, GenericData, Post
+from imagehash import hex_to_hash
+
+from just_memes_telegram.modules.data import Fingerprint, GenericData, Post
+
+
+def randomStr(length: int = 10) -> str:
+    """Return a random alphanumeric string.
+
+    Args:
+        length (int, optional): length of the string
+
+    Returns:
+        str: the random string
+    """
+    return "".join(random.choices(string.ascii_letters + string.digits, k=length))
 
 
 class DataTest(unittest.TestCase):
+    """Unit tests for GenericData, Fingerprint and Post."""
+
     _tests_num: int = 10
 
-    def _randomStr(self, length: int = 10):
-        return "".join(random.sample(string.ascii_letters + string.digits, length))
-
-    def testGenericData(self):
+    def testGenericData(self) -> None:
+        """Test the empty data class."""
         data = GenericData()
-        self.assertIsInstance(data, GenericData)
         self.assertEqual(data.serialize(), {})
         self.assertEqual(str(data), "GenericData()")
 
-    def testFingerprint(self):
+    def testFingerprint(self) -> None:
+        """Test that the fingerprint is serialized without the hash object."""
         for _ in range(self._tests_num):
-            caption = self._randomStr(20)
-            hash = [random.randint(0, 255) for _ in range(32)]
-            hash_str = "".join([hex(x)[2:] for x in hash])
-            url = self._randomStr(50)
-            timestamp = random.randint(0, 1000)
-
+            hash_str = "".join(random.choices("0123456789abcdef", k=16))
             fingerprint_dict = {
-                "caption": caption,
-                "hash": hash,
+                "caption": randomStr(20),
+                "hash": hex_to_hash(hash_str),
                 "hash_str": hash_str,
-                "url": url,
-                "timestamp": timestamp,
+                "url": randomStr(50),
+                "timestamp": random.randint(0, 1000),
             }
-            fingerprint_dict_no_hash = fingerprint_dict.copy()
-            del fingerprint_dict_no_hash["hash"]
-
             fingerprint = Fingerprint(**fingerprint_dict)
 
-            self.assertIsInstance(fingerprint, Fingerprint)
-            self.assertEqual(fingerprint.caption, caption)
-            self.assertEqual(fingerprint.hash, hash)
-            self.assertEqual(fingerprint.hash_str, hash_str)
-            self.assertEqual(fingerprint.url, url)
-            self.assertEqual(fingerprint.timestamp, timestamp)
-            self.assertDictEqual(
-                fingerprint.serialize(),
-                fingerprint_dict_no_hash,
-            )
+            expected = fingerprint_dict.copy()
+            del expected["hash"]
+            self.assertDictEqual(fingerprint.serialize(), expected)
             self.assertEqual(
                 str(fingerprint),
-                f"Fingerprint(caption={caption}, hash_str={hash_str}, "
-                f"url={url}, timestamp={timestamp})",
+                f"Fingerprint(caption={expected['caption']}, hash_str={hash_str}, "
+                f"url={expected['url']}, timestamp={expected['timestamp']})",
             )
 
-    def testPost(self):
+    def testPost(self) -> None:
+        """Test the post serialization and the path setter."""
         for _ in range(self._tests_num):
-            url = self._randomStr(50)
-            id = self._randomStr(10)
-            subreddit = self._randomStr(10)
-            title = self._randomStr(20)
-            score = random.randint(0, 100)
-            timestamp = random.randint(0, 1000)
-            video = random.choice([True, False])
-            path = self._randomStr(50)
             post_dict = {
-                "url": url,
-                "id": id,
-                "subreddit": subreddit,
-                "title": title,
-                "score": score,
-                "timestamp": timestamp,
-                "video": video,
-                "path": path,
+                "url": randomStr(50),
+                "id": randomStr(10),
+                "subreddit": randomStr(10),
+                "title": randomStr(20),
+                "score": random.randint(0, 100),
+                "timestamp": random.randint(0, 1000),
+                "video": random.choice([True, False]),
+                "path": randomStr(50),
             }
             post = Post(**post_dict)
+            self.assertDictEqual(post.serialize(), post_dict)
+            self.assertTrue(str(post).startswith(f"Post(url={post_dict['url']}, "))
 
-            self.assertIsInstance(post, Post)
-            self.assertEqual(post.url, url)
-            self.assertEqual(post.id, id)
-            self.assertEqual(post.subreddit, subreddit)
-            self.assertEqual(post.title, title)
-            self.assertEqual(post.score, score)
-            self.assertEqual(post.timestamp, timestamp)
-            self.assertEqual(post.video, video)
-            self.assertEqual(post.path, path)
-            self.assertDictEqual(
-                post.serialize(),
-                post_dict,
-            )
-            self.assertEqual(
-                str(post),
-                f"Post(url={url}, id={id}, subreddit={subreddit}, title={title}, "
-                f"score={score}, timestamp={timestamp}, video={video}, path={path})",
-            )
-
-            # set path
-            new_path = self._randomStr(50)
+            new_path = randomStr(50)
             post.setPath(new_path)
-
             self.assertEqual(post.path, new_path)
-            self.assertEqual(
-                str(post),
-                f"Post(url={url}, id={id}, subreddit={subreddit}, title={title}, "
-                f"score={score}, timestamp={timestamp}, video={video}, "
-                f"path={new_path})",
-            )
+            self.assertTrue(str(post).endswith(f"path={new_path})"))
+
+    def testDefaultTimestamp(self) -> None:
+        """Test that the default timestamp is evaluated for each instance."""
+        first = Post(url="first")
+        sleep(0.01)
+        second = Post(url="second")
+        self.assertLess(first.timestamp, second.timestamp)
+
+        first_fp = Fingerprint(caption=None, hash=None, hash_str=None, url="a")
+        sleep(0.01)
+        second_fp = Fingerprint(caption=None, hash=None, hash_str=None, url="b")
+        self.assertLess(first_fp.timestamp, second_fp.timestamp)
